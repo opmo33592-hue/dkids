@@ -1,0 +1,2421 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <meta name="theme-color" content="#1F4B43">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Admin Dashboard - SCHILDREN HAVE A LIBRARY</title>
+    <meta name="description" content="Story Forest Admin Dashboard - Manage your children's book library">
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://www.gstatic.com">
+    <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+    
+    <style>
+        :root {
+            --bg-primary: #FFF8E7;
+            --bg-secondary: #FFF0D4;
+            --bg-card: #FFFFFF;
+            --text-primary: #2C3E50;
+            --text-secondary: #7F8C8D;
+            --forest: #1F4B43;
+            --forest-light: #2E6E5D;
+            --coral: #FF6B6B;
+            --coral-dark: #FF5252;
+            --sun: #FFD93D;
+            --sky: #4FC3F7;
+            --border: #F0E6D3;
+            --shadow: 0 8px 32px rgba(0,0,0,0.08);
+            --shadow-hover: 0 16px 48px rgba(0,0,0,0.15);
+            --shadow-card: 0 4px 20px rgba(0,0,0,0.06);
+            --input-bg: #FFFFFF;
+            --success: #4CAF50;
+            --danger: #FF5252;
+            --info: #2196F3;
+            --warning: #FFC107;
+            --amazon-orange: #FF9900;
+            --modal-overlay: rgba(0,0,0,0.6);
+            --badge-bg: rgba(255,107,107,0.1);
+            --nav-bg: rgba(255,255,255,0.95);
+        }
+
+        .dark-mode {
+            --bg-primary: #1a1a2e;
+            --bg-secondary: #16213e;
+            --bg-card: #252540;
+            --text-primary: #E8E8E8;
+            --text-secondary: #A0A0B0;
+            --border: #3A3A50;
+            --shadow: 0 8px 32px rgba(0,0,0,0.4);
+            --shadow-hover: 0 16px 48px rgba(0,0,0,0.6);
+            --shadow-card: 0 4px 20px rgba(0,0,0,0.3);
+            --input-bg: #1E1E35;
+            --modal-overlay: rgba(0,0,0,0.8);
+            --badge-bg: rgba(255,107,107,0.2);
+            --nav-bg: rgba(26,26,46,0.95);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        html {
+            scroll-behavior: smooth;
+            font-size: 16px;
+        }
+
+        body {
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-family: 'Quicksand', sans-serif;
+            min-height: 100vh;
+            line-height: 1.6;
+            transition: background 0.5s ease, color 0.5s ease;
+            overflow-x: hidden;
+        }
+
+        h1, h2, h3, h4, h5, h6 {
+            font-family: 'Baloo 2', cursive;
+            line-height: 1.2;
+        }
+
+        button {
+            cursor: pointer;
+            font-family: 'Quicksand', sans-serif;
+            border: none;
+            outline: none;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        button::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.3);
+            transform: translate(-50%, -50%);
+            transition: width 0.6s, height 0.6s;
+        }
+
+        button:active::before {
+            width: 300px;
+            height: 300px;
+        }
+
+        input, select, textarea {
+            font-family: 'Quicksand', sans-serif;
+        }
+
+        a {
+            text-decoration: none;
+            color: inherit;
+            transition: all 0.3s ease;
+        }
+
+        /* ============ LOGIN SCREEN ============ */
+        .login-screen {
+            position: fixed;
+            inset: 0;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            padding: 20px;
+        }
+
+        .login-screen.hidden {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+            transform: scale(1.1);
+            filter: blur(10px);
+        }
+
+        .login-box {
+            background: var(--bg-card);
+            border-radius: 32px;
+            padding: 48px 40px;
+            width: 100%;
+            max-width: 440px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+            text-align: center;
+            border: 1px solid var(--border);
+            animation: fadeInUp 0.6s ease;
+        }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .login-logo {
+            width: 90px;
+            height: 90px;
+            margin: 0 auto 24px;
+            background: linear-gradient(135deg, var(--coral), var(--coral-dark));
+            border-radius: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+            box-shadow: 0 8px 30px rgba(255,107,107,0.3);
+            animation: floatLogo 3s ease-in-out infinite;
+        }
+
+        @keyframes floatLogo {
+            0%, 100% { transform: translateY(0) rotate(0); }
+            25% { transform: translateY(-10px) rotate(3deg); }
+            75% { transform: translateY(-3px) rotate(-3deg); }
+        }
+
+        .login-title {
+            font-size: clamp(24px, 4vw, 32px);
+            margin-bottom: 8px;
+            background: linear-gradient(45deg, #FFD93D, #FF6B6B, #4FC3F7);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-weight: 800;
+        }
+
+        .login-subtitle {
+            color: var(--text-secondary);
+            margin-bottom: 36px;
+            font-size: 15px;
+            font-weight: 500;
+        }
+
+        .input-group {
+            margin-bottom: 24px;
+            text-align: left;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 700;
+            font-size: 13px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 16px;
+            background: var(--input-bg);
+            border: 2px solid var(--border);
+            border-radius: 16px;
+            color: var(--text-primary);
+            font-size: 16px;
+            font-weight: 600;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+
+        .input-group input:focus {
+            border-color: var(--coral);
+            box-shadow: 0 0 0 4px rgba(255,107,107,0.1);
+        }
+
+        .input-group input::placeholder {
+            color: var(--text-secondary);
+            opacity: 0.6;
+        }
+
+        .login-btn {
+            width: 100%;
+            padding: 18px;
+            background: linear-gradient(135deg, var(--coral), var(--coral-dark));
+            color: white;
+            border-radius: 16px;
+            font-weight: 800;
+            font-size: 16px;
+            margin-top: 12px;
+            letter-spacing: 0.5px;
+            box-shadow: 0 8px 30px rgba(255,107,107,0.35);
+        }
+
+        .login-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 12px 40px rgba(255,107,107,0.5);
+        }
+
+        .login-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .login-error {
+            background: rgba(255,82,82,0.1);
+            border: 1px solid var(--danger);
+            color: var(--danger);
+            padding: 14px;
+            border-radius: 14px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            font-weight: 600;
+            display: none;
+            animation: shake 0.5s ease;
+        }
+
+        .login-error.show {
+            display: block;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-10px); }
+            75% { transform: translateX(10px); }
+        }
+
+        .login-hint {
+            margin-top: 20px;
+            padding: 12px;
+            background: var(--badge-bg);
+            border-radius: 12px;
+            font-size: 12px;
+            color: var(--text-secondary);
+            font-weight: 600;
+        }
+
+        /* ============ DASHBOARD LAYOUT ============ */
+        .dashboard {
+            display: flex;
+            min-height: 100vh;
+            position: relative;
+        }
+
+        /* ============ TOP BAR (MOBILE) ============ */
+        .top-bar-mobile {
+            display: none;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: var(--nav-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            box-shadow: 0 2px 20px rgba(0,0,0,0.08);
+            border-bottom: 1px solid var(--border);
+            padding: 16px 20px;
+            transition: all 0.5s ease;
+        }
+
+        .top-bar-mobile-content {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .mobile-brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .mobile-logo-icon {
+            width: 38px;
+            height: 38px;
+            background: linear-gradient(135deg, var(--coral), var(--coral-dark));
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            box-shadow: 0 4px 15px rgba(255,107,107,0.3);
+        }
+
+        .mobile-brand-text {
+            font-family: 'Baloo 2', cursive;
+            font-weight: 800;
+            font-size: 16px;
+            color: var(--text-primary);
+        }
+
+        .mobile-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .mobile-icon-btn {
+            width: 40px;
+            height: 40px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            color: var(--text-primary);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: var(--shadow-card);
+        }
+
+        .mobile-icon-btn:hover {
+            border-color: var(--coral);
+            background: var(--badge-bg);
+        }
+
+        .mobile-icon-btn.active {
+            background: var(--coral);
+            color: white;
+            border-color: var(--coral);
+        }
+
+        /* ============ SIDEBAR ============ */
+        .sidebar {
+            width: 280px;
+            background: var(--bg-card);
+            border-right: 1px solid var(--border);
+            padding: 24px;
+            position: sticky;
+            top: 0;
+            height: 100vh;
+            overflow-y: auto;
+            z-index: 90;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            flex-direction: column;
+            box-shadow: var(--shadow-card);
+        }
+
+        .sidebar-logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 32px;
+            padding-bottom: 24px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .sidebar-logo-icon {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, var(--coral), var(--coral-dark));
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 26px;
+            box-shadow: 0 4px 15px rgba(255,107,107,0.3);
+        }
+
+        .sidebar-logo-text {
+            font-family: 'Baloo 2', cursive;
+            font-weight: 800;
+            font-size: 20px;
+        }
+
+        .sidebar-menu {
+            list-style: none;
+            flex: 1;
+        }
+
+        .sidebar-menu li {
+            margin-bottom: 6px;
+        }
+
+        .sidebar-menu a {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 14px 18px;
+            border-radius: 14px;
+            color: var(--text-secondary);
+            font-weight: 700;
+            font-size: 15px;
+            text-decoration: none;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .sidebar-menu a:hover {
+            background: var(--badge-bg);
+            color: var(--coral);
+            transform: translateX(4px);
+        }
+
+        .sidebar-menu a.active {
+            background: linear-gradient(135deg, rgba(255,107,107,0.15), rgba(255,107,107,0.05));
+            color: var(--coral);
+            font-weight: 800;
+            box-shadow: inset 4px 0 0 var(--coral);
+        }
+
+        .sidebar-menu .icon {
+            font-size: 22px;
+            width: 28px;
+            text-align: center;
+            flex-shrink: 0;
+        }
+
+        .sidebar-menu .badge-count {
+            margin-left: auto;
+            background: var(--coral);
+            color: white;
+            padding: 2px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 800;
+            min-width: 24px;
+            text-align: center;
+        }
+
+        .sidebar-footer {
+            padding-top: 24px;
+            border-top: 1px solid var(--border);
+            margin-top: auto;
+        }
+
+        .logout-btn {
+            width: 100%;
+            padding: 14px;
+            background: rgba(255,82,82,0.1);
+            color: var(--danger);
+            border: 2px solid rgba(255,82,82,0.2);
+            border-radius: 14px;
+            font-weight: 800;
+            font-size: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            transition: all 0.3s ease;
+        }
+
+        .logout-btn:hover {
+            background: rgba(255,82,82,0.2);
+            border-color: var(--danger);
+            transform: translateY(-2px);
+        }
+
+        /* ============ SIDEBAR OVERLAY ============ */
+        .sidebar-overlay {
+            position: fixed;
+            inset: 0;
+            background: var(--modal-overlay);
+            backdrop-filter: blur(4px);
+            z-index: 85;
+            display: none;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .sidebar-overlay.active {
+            display: block;
+            opacity: 1;
+        }
+
+        /* ============ MAIN CONTENT ============ */
+        .main-content {
+            flex: 1;
+            padding: 32px;
+            min-width: 0;
+            background: var(--bg-primary);
+            transition: background 0.5s ease;
+        }
+
+        .top-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 36px;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        .page-title-section h1 {
+            font-size: clamp(24px, 4vw, 36px);
+            font-weight: 800;
+            margin-bottom: 4px;
+        }
+
+        .page-subtitle {
+            color: var(--text-secondary);
+            font-size: 15px;
+            font-weight: 500;
+        }
+
+        .search-box {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: var(--bg-card);
+            border: 2px solid var(--border);
+            border-radius: 16px;
+            padding: 0 18px;
+            min-width: 280px;
+            transition: all 0.3s ease;
+            box-shadow: var(--shadow-card);
+        }
+
+        .search-box:focus-within {
+            border-color: var(--coral);
+            box-shadow: 0 0 0 6px rgba(255,107,107,0.1), var(--shadow-hover);
+        }
+
+        .search-box input {
+            flex: 1;
+            border: none;
+            background: transparent;
+            padding: 14px 0;
+            color: var(--text-primary);
+            font-size: 15px;
+            font-weight: 600;
+            outline: none;
+        }
+
+        .search-box input::placeholder {
+            color: var(--text-secondary);
+            opacity: 0.7;
+        }
+
+        .search-icon {
+            color: var(--text-secondary);
+            font-size: 18px;
+        }
+
+        /* ============ STATS ROW ============ */
+        .stats-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 20px;
+            margin-bottom: 36px;
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border-radius: 24px;
+            padding: 28px 24px;
+            border: 1px solid var(--border);
+            transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+            box-shadow: var(--shadow-card);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-6px);
+            box-shadow: var(--shadow-hover);
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 80px;
+            height: 80px;
+            background: var(--badge-bg);
+            border-radius: 0 0 0 80px;
+            transition: all 0.4s ease;
+        }
+
+        .stat-card:hover::before {
+            width: 120px;
+            height: 120px;
+        }
+
+        .stat-icon {
+            font-size: 36px;
+            margin-bottom: 12px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .stat-value {
+            font-family: 'Baloo 2', cursive;
+            font-size: 40px;
+            font-weight: 800;
+            color: var(--coral);
+            line-height: 1;
+            position: relative;
+            z-index: 1;
+        }
+
+        .stat-label {
+            color: var(--text-secondary);
+            font-size: 13px;
+            font-weight: 700;
+            margin-top: 6px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* ============ CARDS ============ */
+        .card {
+            background: var(--bg-card);
+            border-radius: 24px;
+            padding: 32px;
+            border: 1px solid var(--border);
+            margin-bottom: 28px;
+            box-shadow: var(--shadow-card);
+            transition: all 0.3s ease;
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 28px;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .card-title {
+            font-size: 24px;
+            font-weight: 700;
+        }
+
+        .card-badge {
+            background: var(--badge-bg);
+            color: var(--coral);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        /* ============ FORMS ============ */
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 24px;
+        }
+
+        .form-group {
+            margin-bottom: 8px;
+        }
+
+        .form-group.full-width {
+            grid-column: 1 / -1;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 10px;
+            font-weight: 700;
+            font-size: 13px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 14px 16px;
+            background: var(--input-bg);
+            border: 2px solid var(--border);
+            border-radius: 14px;
+            color: var(--text-primary);
+            font-size: 15px;
+            font-weight: 600;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            border-color: var(--coral);
+            box-shadow: 0 0 0 4px rgba(255,107,107,0.1);
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .form-group select {
+            cursor: pointer;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 14 14'%3E%3Cpath fill='%23A0A0B0' d='M7 10L2 4h10z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 16px center;
+            padding-right: 44px;
+        }
+
+        .form-group select option {
+            background: var(--bg-card);
+            color: var(--text-primary);
+        }
+
+        .hint-text {
+            color: var(--text-secondary);
+            font-size: 12px;
+            margin-top: 8px;
+            display: block;
+            font-weight: 500;
+        }
+
+        .hint-text strong {
+            color: var(--coral);
+        }
+
+        /* ============ IMAGE UPLOAD ============ */
+        .image-upload-area {
+            border: 3px dashed var(--border);
+            border-radius: 20px;
+            padding: 48px 24px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: var(--input-bg);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .image-upload-area:hover {
+            border-color: var(--coral);
+            background: rgba(255,107,107,0.03);
+        }
+
+        .image-upload-area.dragover {
+            border-color: var(--coral);
+            background: rgba(255,107,107,0.08);
+            transform: scale(1.01);
+            box-shadow: 0 0 0 8px rgba(255,107,107,0.05);
+        }
+
+        .upload-icon {
+            font-size: 52px;
+            margin-bottom: 16px;
+            transition: transform 0.3s ease;
+        }
+
+        .image-upload-area:hover .upload-icon {
+            transform: scale(1.1);
+        }
+
+        .upload-text {
+            font-weight: 700;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+            font-size: 16px;
+        }
+
+        .upload-hint {
+            font-size: 13px;
+            color: var(--text-secondary);
+            opacity: 0.7;
+            font-weight: 500;
+        }
+
+        .image-preview {
+            margin-top: 20px;
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .image-preview-item {
+            position: relative;
+            width: 140px;
+            height: 180px;
+            border-radius: 16px;
+            overflow: hidden;
+            border: 2px solid var(--border);
+            box-shadow: var(--shadow-card);
+            animation: fadeInUp 0.3s ease;
+        }
+
+        .image-preview-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .remove-image {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 32px;
+            height: 32px;
+            background: var(--danger);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 700;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(255,82,82,0.4);
+            border: 2px solid white;
+        }
+
+        .remove-image:hover {
+            transform: scale(1.2) rotate(90deg);
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: var(--border);
+            border-radius: 4px;
+            margin-top: 16px;
+            overflow: hidden;
+            display: none;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--coral), var(--coral-dark));
+            border-radius: 4px;
+            transition: width 0.3s ease;
+            width: 0%;
+        }
+
+        /* ============ BUTTONS ============ */
+        .btn {
+            padding: 14px 28px;
+            border-radius: 14px;
+            font-weight: 800;
+            font-size: 15px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            letter-spacing: 0.3px;
+            transition: all 0.3s ease;
+            white-space: nowrap;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--coral), var(--coral-dark));
+            color: white;
+            box-shadow: 0 8px 30px rgba(255,107,107,0.35);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 12px 40px rgba(255,107,107,0.5);
+        }
+
+        .btn-secondary {
+            background: var(--input-bg);
+            color: var(--text-primary);
+            border: 2px solid var(--border);
+        }
+
+        .btn-secondary:hover {
+            border-color: var(--coral);
+            box-shadow: var(--shadow-hover);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #FF5252, #D32F2F);
+            color: white;
+            box-shadow: 0 4px 15px rgba(255,82,82,0.3);
+        }
+
+        .btn-danger:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(255,82,82,0.5);
+        }
+
+        .btn-warning {
+            background: linear-gradient(135deg, #FFC107, #FF9800);
+            color: #111;
+            box-shadow: 0 4px 15px rgba(255,193,7,0.3);
+        }
+
+        .btn-sm {
+            padding: 10px 18px;
+            font-size: 13px;
+            border-radius: 10px;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        /* ============ TABLE ============ */
+        .table-container {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            border-radius: 16px;
+            border: 1px solid var(--border);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 700px;
+        }
+
+        table th, table td {
+            padding: 16px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+            white-space: nowrap;
+        }
+
+        table th {
+            font-weight: 800;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: var(--text-secondary);
+            background: var(--input-bg);
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
+
+        table tbody tr {
+            transition: all 0.3s ease;
+        }
+
+        table tbody tr:hover {
+            background: rgba(255,107,107,0.03);
+        }
+
+        .book-thumb {
+            width: 45px;
+            height: 60px;
+            border-radius: 10px;
+            object-fit: cover;
+            background: var(--input-bg);
+            box-shadow: var(--shadow-card);
+        }
+
+        .book-title-cell {
+            font-weight: 700;
+            color: var(--text-primary);
+            max-width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .actions-cell {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .badge-success {
+            background: rgba(76,175,80,0.15);
+            color: #4CAF50;
+        }
+
+        .badge-warning {
+            background: rgba(255,193,7,0.15);
+            color: #FF9800;
+        }
+
+        .rating-stars {
+            color: var(--sun);
+            font-size: 16px;
+        }
+
+        /* ============ MODAL ============ */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: var(--modal-overlay);
+            backdrop-filter: blur(8px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 20px;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .modal-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .modal-box {
+            background: var(--bg-primary);
+            border-radius: 28px;
+            max-width: 480px;
+            width: 100%;
+            padding: 36px;
+            position: relative;
+            box-shadow: 0 30px 80px rgba(0,0,0,0.5);
+            transform: translateY(30px);
+            transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+            border: 1px solid var(--border);
+        }
+
+        .modal-overlay.active .modal-box {
+            transform: translateY(0);
+        }
+
+        .modal-close {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            width: 40px;
+            height: 40px;
+            background: var(--coral);
+            color: white;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 18px;
+        }
+
+        .modal-close:hover {
+            background: var(--coral-dark);
+            transform: rotate(90deg);
+        }
+
+        .modal-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+
+        .modal-title {
+            font-size: 24px;
+            margin-bottom: 12px;
+        }
+
+        .modal-text {
+            color: var(--text-secondary);
+            margin-bottom: 28px;
+            line-height: 1.7;
+            font-size: 15px;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+            flex-wrap: wrap;
+        }
+
+        /* ============ NOTIFICATION ============ */
+        .notification {
+            position: fixed;
+            top: 24px;
+            right: 24px;
+            padding: 16px 24px;
+            border-radius: 16px;
+            font-weight: 700;
+            z-index: 2000;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateX(100px);
+            transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+            box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+            max-width: 400px;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .notification.show {
+            opacity: 1;
+            visibility: visible;
+            transform: translateX(0);
+        }
+
+        .notification.success {
+            background: var(--success);
+            color: white;
+        }
+
+        .notification.error {
+            background: var(--danger);
+            color: white;
+        }
+
+        .notification.info {
+            background: var(--info);
+            color: white;
+        }
+
+        /* ============ EMPTY STATE ============ */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-secondary);
+        }
+
+        .empty-state .empty-icon {
+            font-size: 72px;
+            margin-bottom: 20px;
+            animation: floatLogo 3s ease-in-out infinite;
+        }
+
+        .empty-state h3 {
+            font-size: 22px;
+            margin-bottom: 10px;
+            color: var(--text-primary);
+        }
+
+        .empty-state p {
+            font-size: 15px;
+            max-width: 400px;
+            margin: 0 auto;
+        }
+
+        /* ============ LOADING ============ */
+        .loading-spinner {
+            width: 44px;
+            height: 44px;
+            border: 4px solid var(--border);
+            border-top-color: var(--coral);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .loading-container {
+            text-align: center;
+            padding: 60px 20px;
+        }
+
+        /* ============ CATEGORIES GRID ============ */
+        .categories-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 16px;
+        }
+
+        .category-item {
+            background: var(--input-bg);
+            padding: 24px 16px;
+            border-radius: 20px;
+            text-align: center;
+            border: 2px solid var(--border);
+            transition: all 0.3s ease;
+        }
+
+        .category-item:hover {
+            border-color: var(--coral);
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-hover);
+        }
+
+        .category-emoji-lg {
+            font-size: 48px;
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        .category-name-lg {
+            font-weight: 700;
+            font-size: 15px;
+            color: var(--text-primary);
+        }
+
+        /* ============ RESPONSIVE DESIGN ============ */
+        @media (max-width: 1024px) {
+            .top-bar-mobile {
+                display: block;
+            }
+
+            .sidebar {
+                position: fixed;
+                left: 0;
+                top: 0;
+                bottom: 0;
+                transform: translateX(-100%);
+                z-index: 100;
+                transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            }
+
+            .sidebar.open {
+                transform: translateX(0);
+                box-shadow: 0 0 0 100vw rgba(0,0,0,0.5);
+            }
+
+            .main-content {
+                margin-left: 0;
+                padding: 20px;
+            }
+
+            .search-box {
+                min-width: 100%;
+            }
+
+            .top-bar {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .stats-row {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 12px;
+            }
+
+            .stat-card {
+                padding: 20px 16px;
+            }
+
+            .stat-value {
+                font-size: 32px;
+            }
+
+            .card {
+                padding: 24px 20px;
+            }
+
+            .modal-box {
+                padding: 28px 24px;
+            }
+
+            .btn-group {
+                flex-direction: column;
+            }
+
+            .btn {
+                width: 100%;
+                justify-content: center;
+            }
+
+            table th, table td {
+                padding: 12px 10px;
+                font-size: 13px;
+            }
+
+            .book-title-cell {
+                max-width: 120px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .stats-row {
+                grid-template-columns: 1fr;
+            }
+
+            .login-box {
+                padding: 36px 24px;
+            }
+
+            .notification {
+                left: 20px;
+                right: 20px;
+                max-width: none;
+            }
+
+            .categories-grid {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 10px;
+            }
+
+            .category-item {
+                padding: 16px 12px;
+            }
+        }
+
+        /* ============ THEME TOGGLE ============ */
+        .theme-toggle-btn {
+            width: 56px;
+            height: 30px;
+            background: linear-gradient(135deg, #FFD93D, #FFC107);
+            border-radius: 15px;
+            position: relative;
+            cursor: pointer;
+            transition: all 0.5s ease;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+
+        .dark-mode .theme-toggle-btn {
+            background: linear-gradient(135deg, #4A4A6A, #3A3A5A);
+        }
+
+        .theme-toggle-btn::before {
+            content: '☀️';
+            position: absolute;
+            left: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 14px;
+            transition: all 0.4s ease;
+            z-index: 2;
+        }
+
+        .dark-mode .theme-toggle-btn::before {
+            content: '🌙';
+        }
+
+        .theme-toggle-btn::after {
+            content: '';
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 24px;
+            height: 24px;
+            background: white;
+            border-radius: 50%;
+            transition: all 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            z-index: 1;
+        }
+
+        .dark-mode .theme-toggle-btn::after {
+            left: 29px;
+            background: #1a1a2e;
+        }
+
+        /* ============ ACCESSIBILITY ============ */
+        :focus-visible {
+            outline: 2px solid var(--coral);
+            outline-offset: 2px;
+        }
+
+        @media print {
+            .sidebar, .top-bar-mobile, .notification {
+                display: none !important;
+            }
+            
+            .main-content {
+                margin-left: 0;
+            }
+        }
+    </style>
+</head>
+<body class="dark-mode">
+
+    <!-- LOGIN SCREEN -->
+    <div class="login-screen" id="loginScreen">
+        <div class="login-box">
+            <div class="login-logo">🦊</div>
+            <h1 class="login-title">Admin Dashboard</h1>
+            <p class="login-subtitle">CHILDREN HAVE A LIBRARY- Book Management</p>
+            <div class="login-error" id="loginError">Invalid credentials. Please try again.</div>
+            <div class="input-group">
+                <label>📧 Email Address</label>
+                <input type="email" id="loginEmail" placeholder="admin@storyforest.com" value="admin@storyforest.com" autocomplete="email">
+            </div>
+            <div class="input-group">
+                <label>🔒 Password</label>
+                <input type="password" id="loginPassword" placeholder="Enter your password" value="admin123" autocomplete="current-password">
+            </div>
+            <button class="login-btn" id="loginBtn">
+                <span id="loginBtnText">🔐 Sign In</span>
+            </button>
+            <div class="login-hint">
+                💡 Default credentials: <strong>admin@storyforest.com</strong> / <strong>admin123</strong>
+            </div>
+        </div>
+    </div>
+
+    <!-- MOBILE TOP BAR -->
+    <div class="top-bar-mobile" id="topBarMobile" style="display:none;">
+        <div class="top-bar-mobile-content">
+            <div class="mobile-brand">
+                <div class="mobile-logo-icon">🦊</div>
+                <span class="mobile-brand-text"> CHILDREN HAVE A LIBRARY</span>
+            </div>
+            <div class="mobile-actions">
+                <button class="mobile-icon-btn" id="themeToggleMobile" aria-label="Toggle theme">🌙</button>
+                <button class="mobile-icon-btn" id="menuToggleMobile" aria-label="Menu">☰</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SIDEBAR OVERLAY -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <!-- DASHBOARD -->
+    <div class="dashboard" id="dashboard" style="display:none;">
+        <!-- SIDEBAR -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-logo">
+                <div class="sidebar-logo-icon">🦊</div>
+                <div class="sidebar-logo-text">CHILDREN HAVE A LIBRARY</div>
+                <div class="theme-toggle-btn" id="themeToggle" title="Toggle theme" style="margin-left:auto;"></div>
+            </div>
+            <ul class="sidebar-menu">
+                <li>
+                    <a class="active" data-page="add-book">
+                        <span class="icon">📚</span> Add New Book
+                    </a>
+                </li>
+                <li>
+                    <a data-page="manage-books">
+                        <span class="icon">📋</span> Manage Books
+                        <span class="badge-count" id="sidebarBookCount">0</span>
+                    </a>
+                </li>
+                <li>
+                    <a data-page="categories">
+                        <span class="icon">🏷️</span> Categories
+                        <span class="badge-count" id="sidebarCatCount">11</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="index.html" target="_blank" rel="noopener noreferrer">
+                        <span class="icon">🌐</span> View Website
+                        <span style="margin-left:auto;font-size:12px;">↗</span>
+                    </a>
+                </li>
+            </ul>
+            <div class="sidebar-footer">
+                <button class="logout-btn" id="logoutBtn">
+                    <span>🚪</span> Logout
+                </button>
+            </div>
+        </aside>
+
+        <!-- MAIN CONTENT -->
+        <main class="main-content">
+            <!-- TOP BAR DESKTOP -->
+            <div class="top-bar">
+                <div class="page-title-section">
+                    <h1 id="pageTitle">Add New Book</h1>
+                    <p class="page-subtitle" id="pageSubtitle">Fill in the details to add a new book to the library</p>
+                </div>
+                <div class="search-box" id="searchBox" style="display:none;">
+                    <span class="search-icon">🔍</span>
+                    <input type="text" id="dashboardSearch" placeholder="Search books..." aria-label="Search books">
+                </div>
+            </div>
+
+            <!-- STATS ROW -->
+            <div class="stats-row">
+                <div class="stat-card">
+                    <div class="stat-icon">📚</div>
+                    <div class="stat-value" id="statTotalBooks">0</div>
+                    <div class="stat-label">Total Books</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">⭐</div>
+                    <div class="stat-value" id="statTotalReviews">0</div>
+                    <div class="stat-label">Total Reviews</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">🏷️</div>
+                    <div class="stat-value" id="statCategories">11</div>
+                    <div class="stat-label">Categories</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">📊</div>
+                    <div class="stat-value" id="statAvgRating">0.0</div>
+                    <div class="stat-label">Average Rating</div>
+                </div>
+            </div>
+
+            <!-- PAGE: ADD BOOK -->
+            <div class="page-content" id="page-add-book">
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">📖 Book Details</h3>
+                        <span class="card-badge">New Entry</span>
+                    </div>
+                    <form id="addBookForm" class="form-grid">
+                        <div class="form-group">
+                            <label>📕 Book Title *</label>
+                            <input type="text" id="bookTitle" placeholder="Enter book title" required>
+                        </div>
+                        <div class="form-group">
+                            <label>✍️ Author *</label>
+                            <input type="text" id="bookAuthor" placeholder="Enter author name" required>
+                        </div>
+                        <div class="form-group">
+                            <label>🏷️ Category *</label>
+                            <select id="bookCategory" required>
+                                <option value="">Select category</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>🛒 Amazon ASIN</label>
+                            <input type="text" id="bookAsin" placeholder="e.g., B0XXXXXXX">
+                            <span class="hint-text">Find ASIN in Amazon URL: amazon.com/dp/<strong>B0XXXXXXX</strong></span>
+                        </div>
+                        <div class="form-group full-width">
+                            <label>🔗 Amazon Link (Optional)</label>
+                            <input type="url" id="bookAmazonLink" placeholder="https://www.amazon.com/dp/B0XXXXXXX">
+                            <span class="hint-text">This link opens when users click the book cover</span>
+                        </div>
+                        <div class="form-group full-width">
+                            <label>🖼️ Book Cover Image</label>
+                            <div class="image-upload-area" id="imageUploadArea">
+                                <div class="upload-icon">📸</div>
+                                <div class="upload-text">Click or drag & drop to upload</div>
+                                <div class="upload-hint">JPG, PNG or WebP (max 2MB - stored as Base64)</div>
+                                <input type="file" id="imageInput" accept="image/*" style="display:none;">
+                            </div>
+                            <div class="image-preview" id="imagePreview"></div>
+                            <div class="progress-bar" id="uploadProgress">
+                                <div class="progress-bar-fill" id="progressFill"></div>
+                            </div>
+                            <span class="hint-text">Image will be converted to Base64 and stored in Firestore (max ~2MB recommended)</span>
+                        </div>
+                        <div class="form-group full-width">
+                            <div class="btn-group">
+                                <button type="submit" class="btn btn-primary" id="submitBookBtn">
+                                    📚 Add Book to Library
+                                </button>
+                                <button type="button" class="btn btn-secondary" id="clearFormBtn">
+                                    🗑️ Clear Form
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- PAGE: MANAGE BOOKS -->
+            <div class="page-content" id="page-manage-books" style="display:none;">
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">📋 All Books</h3>
+                        <span class="card-badge" id="booksCount">0 books</span>
+                    </div>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Cover</th>
+                                    <th>Title</th>
+                                    <th>Author</th>
+                                    <th>Category</th>
+                                    <th>Rating</th>
+                                    <th>ASIN</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="booksTableBody">
+                                <tr>
+                                    <td colspan="7">
+                                        <div class="loading-container">
+                                            <div class="loading-spinner"></div>
+                                            <p style="margin-top:16px;color:var(--text-secondary);">Loading books...</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PAGE: CATEGORIES -->
+            <div class="page-content" id="page-categories" style="display:none;">
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">🏷️ Categories List</h3>
+                        <span class="card-badge" id="catCountBadge">11 Categories</span>
+                    </div>
+                    <div class="categories-grid" id="categoriesList"></div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- DELETE MODAL -->
+    <div class="modal-overlay" id="deleteModal">
+        <div class="modal-box">
+            <button class="modal-close" id="closeDeleteModal" aria-label="Close">✕</button>
+            <div class="modal-icon">⚠️</div>
+            <h3 class="modal-title">Delete Book</h3>
+            <p class="modal-text">
+                Are you sure you want to permanently delete "<strong id="deleteBookTitle"></strong>"? 
+                This action cannot be undone and all reviews will be removed.
+            </p>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" id="cancelDeleteBtn">Cancel</button>
+                <button class="btn btn-danger" id="confirmDeleteBtn">🗑️ Delete Permanently</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- NOTIFICATION -->
+    <div class="notification" id="notification" role="alert" aria-live="polite"></div>
+
+    <script>
+        // ============ CONFIGURATION ============
+        const CONFIG = {
+            firebase: {
+                apiKey: "AIzaSyAnoQxH4ox85hOoIf_ka_5K1Dbub3uStsQ",
+                authDomain: "kids-f2031.firebaseapp.com",
+                databaseURL: "https://kids-f2031-default-rtdb.firebaseio.com",
+                projectId: "kids-f2031",
+                storageBucket: "kids-f2031.firebasestorage.app",
+                messagingSenderId: "832514915347",
+                appId: "1:832514915347:web:a3179a1d708d043b4fd3e6",
+                measurementId: "G-182PQM53WS"
+            },
+            collections: {
+                books: 'kids_books',
+                reviews: 'reviews'
+            },
+            admin: {
+                email: 'admin@storyforest.com',
+                password: 'admin123'
+            },
+            notificationTimeout: 3000,
+            maxImageSize: 2 * 1024 * 1024 // 2MB
+        };
+
+        // ============ UTILITY FUNCTIONS ============
+        class Utils {
+            static escapeHTML(str) {
+                if (typeof str !== 'string') return '';
+                const div = document.createElement('div');
+                div.textContent = str;
+                return div.innerHTML;
+            }
+
+            static showNotification(message, type = 'success') {
+                const notification = document.getElementById('notification');
+                if (!notification) return;
+                
+                const icons = { success: '✅', error: '❌', info: 'ℹ️' };
+                notification.innerHTML = `${icons[type] || ''} ${message}`;
+                notification.className = `notification ${type} show`;
+                
+                if (notification._timeout) clearTimeout(notification._timeout);
+                notification._timeout = setTimeout(() => {
+                    notification.classList.remove('show');
+                }, CONFIG.notificationTimeout);
+            }
+
+            static debounce(func, delay = 300) {
+                let timeout;
+                return function executedFunction(...args) {
+                    const later = () => {
+                        clearTimeout(timeout);
+                        func(...args);
+                    };
+                    clearTimeout(timeout);
+                    timeout = setTimeout(later, delay);
+                };
+            }
+
+            static formatFileSize(bytes) {
+                if (bytes < 1024) return bytes + ' B';
+                if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+                return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+            }
+        }
+
+        // ============ STATE MANAGEMENT ============
+        class AppState {
+            constructor() {
+                this.allBooks = [];
+                this.deleteTargetId = null;
+                this.selectedImageData = null;
+                this.isAuthenticated = false;
+                this.currentPage = 'add-book';
+                
+                this.categories = [
+                    { name: 'Moral', emoji: '🌟' },
+                    { name: 'Fiction', emoji: '📖' },
+                    { name: 'Non Fiction', emoji: '📚' },
+                    { name: 'Science Fiction', emoji: '🚀' },
+                    { name: 'Mystery', emoji: '🔍' },
+                    { name: 'Comics', emoji: '💭' },
+                    { name: 'Fantasy', emoji: '🧙' },
+                    { name: 'Fairy Tale', emoji: '🧚' },
+                    { name: 'Biography', emoji: '👤' },
+                    { name: 'Ghost Story', emoji: '👻' },
+                    { name: 'Others', emoji: '📦' }
+                ];
+            }
+        }
+
+        // ============ DATABASE SERVICE ============
+        class DatabaseService {
+            constructor() {
+                try {
+                    if (!firebase.apps.length) {
+                        firebase.initializeApp(CONFIG.firebase);
+                    }
+                    this.db = firebase.firestore();
+                    
+                    // Enable offline persistence
+                    this.db.enablePersistence().catch(err => {
+                        console.warn('Offline persistence not available:', err.code);
+                    });
+                    
+                    console.log('✅ Database Service Initialized');
+                } catch (error) {
+                    console.error('❌ Database initialization failed:', error);
+                }
+            }
+
+            async addBook(bookData) {
+                try {
+                    const docRef = await this.db.collection(CONFIG.collections.books).add({
+                        ...bookData,
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    console.log('✅ Book added:', docRef.id);
+                    return docRef.id;
+                } catch (error) {
+                    console.error('❌ Error adding book:', error);
+                    throw error;
+                }
+            }
+
+            loadBooksRealtime(callback) {
+                return this.db.collection(CONFIG.collections.books)
+                    .orderBy('createdAt', 'desc')
+                    .onSnapshot(snapshot => {
+                        const books = [];
+                        snapshot.forEach(doc => {
+                            const data = doc.data();
+                            books.push({
+                                id: doc.id,
+                                title: data.title || 'Untitled',
+                                author: data.author || 'Unknown',
+                                category: data.category || '',
+                                asin: data.asin || '',
+                                amazonLink: data.amazonLink || '',
+                                imageUrl: data.imageUrl || '',
+                                avgRating: data.avgRating || 0,
+                                createdAt: data.createdAt
+                            });
+                        });
+                        callback(books, null);
+                    }, error => {
+                        console.error('❌ Error loading books:', error);
+                        callback([], error);
+                    });
+            }
+
+            async deleteBook(bookId) {
+                try {
+                    // Delete all reviews first
+                    const reviewsSnap = await this.db.collection(CONFIG.collections.books)
+                        .doc(bookId)
+                        .collection(CONFIG.collections.reviews)
+                        .get();
+                    
+                    const batch = this.db.batch();
+                    reviewsSnap.forEach(doc => batch.delete(doc.ref));
+                    await batch.commit();
+                    
+                    // Delete the book
+                    await this.db.collection(CONFIG.collections.books).doc(bookId).delete();
+                    console.log('✅ Book deleted:', bookId);
+                    return true;
+                } catch (error) {
+                    console.error('❌ Error deleting book:', error);
+                    throw error;
+                }
+            }
+
+            async countAllReviews() {
+                try {
+                    let total = 0;
+                    for (const book of appState.allBooks) {
+                        const snap = await this.db.collection(CONFIG.collections.books)
+                            .doc(book.id)
+                            .collection(CONFIG.collections.reviews)
+                            .get();
+                        total += snap.size;
+                    }
+                    return total;
+                } catch (error) {
+                    console.error('❌ Error counting reviews:', error);
+                    return 0;
+                }
+            }
+        }
+
+        // ============ UI CONTROLLER ============
+        class AdminUIController {
+            constructor() {
+                this.loginScreen = document.getElementById('loginScreen');
+                this.dashboard = document.getElementById('dashboard');
+                this.sidebar = document.getElementById('sidebar');
+                this.sidebarOverlay = document.getElementById('sidebarOverlay');
+                this.topBarMobile = document.getElementById('topBarMobile');
+                this.searchBox = document.getElementById('searchBox');
+                
+                this.setupEventListeners();
+                this.initializeTheme();
+                this.checkAuthState();
+            }
+
+            setupEventListeners() {
+                // Login
+                document.getElementById('loginBtn').addEventListener('click', () => this.handleLogin());
+                document.getElementById('loginPassword').addEventListener('keypress', e => {
+                    if (e.key === 'Enter') this.handleLogin();
+                });
+
+                // Logout
+                document.getElementById('logoutBtn').addEventListener('click', () => this.handleLogout());
+
+                // Sidebar navigation
+                document.querySelectorAll('.sidebar-menu a[data-page]').forEach(link => {
+                    link.addEventListener('click', e => {
+                        e.preventDefault();
+                        const page = link.dataset.page;
+                        this.navigateToPage(page);
+                        this.closeMobileSidebar();
+                    });
+                });
+
+                // Mobile menu
+                document.getElementById('menuToggleMobile').addEventListener('click', () => this.toggleMobileSidebar());
+                this.sidebarOverlay.addEventListener('click', () => this.closeMobileSidebar());
+
+                // Theme toggles
+                document.getElementById('themeToggle').addEventListener('click', () => this.toggleTheme());
+                document.getElementById('themeToggleMobile').addEventListener('click', () => this.toggleTheme());
+
+                // Delete modal
+                document.getElementById('closeDeleteModal').addEventListener('click', () => this.closeDeleteModal());
+                document.getElementById('cancelDeleteBtn').addEventListener('click', () => this.closeDeleteModal());
+                document.getElementById('confirmDeleteBtn').addEventListener('click', () => this.handleDeleteBook());
+
+                // Form handlers
+                document.getElementById('addBookForm').addEventListener('submit', e => {
+                    e.preventDefault();
+                    this.handleAddBook();
+                });
+                document.getElementById('clearFormBtn').addEventListener('click', () => this.clearForm());
+
+                // Search
+                const debouncedSearch = Utils.debounce(() => this.renderBooksTable());
+                document.getElementById('dashboardSearch').addEventListener('input', debouncedSearch);
+
+                // Image upload
+                this.setupImageUpload();
+
+                // Keyboard shortcuts
+                document.addEventListener('keydown', e => {
+                    if (e.key === 'Escape') {
+                        this.closeDeleteModal();
+                        this.closeMobileSidebar();
+                    }
+                });
+
+                // Close sidebar on window resize
+                window.addEventListener('resize', () => {
+                    if (window.innerWidth > 1024) {
+                        this.closeMobileSidebar();
+                    }
+                });
+            }
+
+            // ============ AUTH ============
+            checkAuthState() {
+                if (sessionStorage.getItem('adminAuth') === 'true') {
+                    appState.isAuthenticated = true;
+                    this.showDashboard();
+                }
+            }
+
+            handleLogin() {
+                const email = document.getElementById('loginEmail').value.trim();
+                const password = document.getElementById('loginPassword').value.trim();
+                const loginError = document.getElementById('loginError');
+                const loginBtn = document.getElementById('loginBtn');
+                const loginBtnText = document.getElementById('loginBtnText');
+
+                if (!email || !password) {
+                    loginError.textContent = 'Please enter both email and password.';
+                    loginError.classList.add('show');
+                    return;
+                }
+
+                loginBtn.disabled = true;
+                loginBtnText.textContent = '⏳ Authenticating...';
+
+                setTimeout(() => {
+                    if (email === CONFIG.admin.email && password === CONFIG.admin.password) {
+                        appState.isAuthenticated = true;
+                        sessionStorage.setItem('adminAuth', 'true');
+                        loginError.classList.remove('show');
+                        this.showDashboard();
+                        Utils.showNotification('Welcome back, Admin! 🎉', 'success');
+                    } else {
+                        loginError.textContent = 'Invalid credentials. Please try again.';
+                        loginError.classList.add('show');
+                        loginBtn.disabled = false;
+                        loginBtnText.textContent = '🔐 Sign In';
+                    }
+                }, 600);
+            }
+
+            handleLogout() {
+                sessionStorage.removeItem('adminAuth');
+                appState.isAuthenticated = false;
+                this.dashboard.style.display = 'none';
+                this.topBarMobile.style.display = 'none';
+                this.loginScreen.classList.remove('hidden');
+                document.getElementById('loginPassword').value = '';
+                document.getElementById('loginBtn').disabled = false;
+                document.getElementById('loginBtnText').textContent = '🔐 Sign In';
+                Utils.showNotification('Logged out successfully', 'info');
+            }
+
+            showDashboard() {
+                this.loginScreen.classList.add('hidden');
+                this.dashboard.style.display = 'flex';
+                this.topBarMobile.style.display = 'block';
+                this.initializeDashboard();
+            }
+
+            // ============ NAVIGATION ============
+            navigateToPage(page) {
+                appState.currentPage = page;
+                
+                // Update active link
+                document.querySelectorAll('.sidebar-menu a[data-page]').forEach(link => {
+                    link.classList.toggle('active', link.dataset.page === page);
+                });
+
+                // Show/hide pages
+                document.querySelectorAll('.page-content').forEach(pc => {
+                    pc.style.display = 'none';
+                });
+                
+                const targetPage = document.getElementById('page-' + page);
+                if (targetPage) targetPage.style.display = 'block';
+
+                // Update header
+                const titles = {
+                    'add-book': 'Add New Book',
+                    'manage-books': 'Manage Books',
+                    'categories': 'Categories'
+                };
+                const subtitles = {
+                    'add-book': 'Fill in the details to add a new book to the library',
+                    'manage-books': 'View, search, and manage all books in the library',
+                    'categories': 'Browse all available book categories'
+                };
+
+                document.getElementById('pageTitle').textContent = titles[page] || page;
+                document.getElementById('pageSubtitle').textContent = subtitles[page] || '';
+                this.searchBox.style.display = page === 'manage-books' ? 'flex' : 'none';
+            }
+
+            // ============ MOBILE SIDEBAR ============
+            toggleMobileSidebar() {
+                this.sidebar.classList.toggle('open');
+                this.sidebarOverlay.classList.toggle('active');
+                document.body.style.overflow = this.sidebar.classList.contains('open') ? 'hidden' : '';
+            }
+
+            closeMobileSidebar() {
+                this.sidebar.classList.remove('open');
+                this.sidebarOverlay.classList.remove('active');
+                document.body.style.overflow = '';
+            }
+
+            // ============ THEME ============
+            toggleTheme() {
+                const isDark = document.body.classList.contains('dark-mode');
+                if (isDark) {
+                    document.body.classList.remove('dark-mode');
+                    localStorage.setItem('adminTheme', 'light');
+                } else {
+                    document.body.classList.add('dark-mode');
+                    localStorage.setItem('adminTheme', 'dark');
+                }
+                this.updateThemeIcons();
+            }
+
+            initializeTheme() {
+                const saved = localStorage.getItem('adminTheme');
+                if (saved === 'light') {
+                    document.body.classList.remove('dark-mode');
+                } else {
+                    document.body.classList.add('dark-mode');
+                }
+                this.updateThemeIcons();
+            }
+
+            updateThemeIcons() {
+                const isDark = document.body.classList.contains('dark-mode');
+                document.getElementById('themeToggleMobile').textContent = isDark ? '🌙' : '☀️';
+            }
+
+            // ============ IMAGE UPLOAD ============
+            setupImageUpload() {
+                const uploadArea = document.getElementById('imageUploadArea');
+                const imageInput = document.getElementById('imageInput');
+
+                uploadArea.addEventListener('click', () => imageInput.click());
+
+                uploadArea.addEventListener('dragover', e => {
+                    e.preventDefault();
+                    uploadArea.classList.add('dragover');
+                });
+
+                uploadArea.addEventListener('dragleave', () => {
+                    uploadArea.classList.remove('dragover');
+                });
+
+                uploadArea.addEventListener('drop', e => {
+                    e.preventDefault();
+                    uploadArea.classList.remove('dragover');
+                    const file = e.dataTransfer.files[0];
+                    if (file) this.handleImageSelect(file);
+                });
+
+                imageInput.addEventListener('change', e => {
+                    const file = e.target.files[0];
+                    if (file) this.handleImageSelect(file);
+                });
+            }
+
+            handleImageSelect(file) {
+                if (!file.type.match('image.*')) {
+                    Utils.showNotification('Please select an image file (JPG, PNG, WebP)', 'error');
+                    return;
+                }
+
+                if (file.size > CONFIG.maxImageSize) {
+                    Utils.showNotification(`Image too large! Max size is ${Utils.formatFileSize(CONFIG.maxImageSize)}`, 'error');
+                    return;
+                }
+
+                const progressBar = document.getElementById('uploadProgress');
+                const progressFill = document.getElementById('progressFill');
+                progressBar.style.display = 'block';
+                progressFill.style.width = '0%';
+
+                const reader = new FileReader();
+                
+                reader.onprogress = (e) => {
+                    if (e.lengthComputable) {
+                        const percent = (e.loaded / e.total) * 100;
+                        progressFill.style.width = percent + '%';
+                    }
+                };
+
+                reader.onload = (e) => {
+                    appState.selectedImageData = e.target.result;
+                    progressBar.style.display = 'none';
+                    
+                    const preview = document.getElementById('imagePreview');
+                    preview.innerHTML = `
+                        <div class="image-preview-item">
+                            <img src="${appState.selectedImageData}" alt="Preview">
+                            <span class="remove-image" onclick="window.removeImage()">✕</span>
+                        </div>`;
+                    
+                    const sizeKB = (appState.selectedImageData.length / 1024).toFixed(1);
+                    console.log(`✅ Image loaded: ${sizeKB}KB`);
+                    Utils.showNotification(`Image loaded successfully (${sizeKB}KB)`, 'success');
+                };
+
+                reader.onerror = () => {
+                    progressBar.style.display = 'none';
+                    Utils.showNotification('Error reading file. Please try again.', 'error');
+                };
+
+                reader.readAsDataURL(file);
+            }
+
+            removeImage() {
+                appState.selectedImageData = null;
+                document.getElementById('imagePreview').innerHTML = '';
+                document.getElementById('imageInput').value = '';
+                document.getElementById('uploadProgress').style.display = 'none';
+            }
+
+            // ============ FORM HANDLERS ============
+            async handleAddBook() {
+                const title = document.getElementById('bookTitle').value.trim();
+                const author = document.getElementById('bookAuthor').value.trim();
+                const category = document.getElementById('bookCategory').value;
+                const asin = document.getElementById('bookAsin').value.trim();
+                const amazonLink = document.getElementById('bookAmazonLink').value.trim();
+
+                if (!title || !author || !category) {
+                    Utils.showNotification('Please fill in all required fields (*)', 'error');
+                    return;
+                }
+
+                const submitBtn = document.getElementById('submitBookBtn');
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '⏳ Adding Book...';
+
+                try {
+                    const bookData = {
+                        title,
+                        author,
+                        category,
+                        asin: asin || '',
+                        amazonLink: amazonLink || '',
+                        imageUrl: appState.selectedImageData || '',
+                        avgRating: 0
+                    };
+
+                    await databaseService.addBook(bookData);
+                    
+                    Utils.showNotification('Book added successfully! 🎉', 'success');
+                    this.clearForm();
+                    
+                    // Update stats
+                    await this.updateStats();
+                    
+                } catch (error) {
+                    console.error('Error adding book:', error);
+                    if (error.message.includes('permission-denied')) {
+                        Utils.showNotification('Permission denied! Check Firebase security rules.', 'error');
+                    } else {
+                        Utils.showNotification('Failed to add book: ' + error.message, 'error');
+                    }
+                } finally {
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = '📚 Add Book to Library';
+                }
+            }
+
+            clearForm() {
+                document.getElementById('addBookForm').reset();
+                this.removeImage();
+                document.getElementById('bookTitle').focus();
+            }
+
+            // ============ DELETE HANDLER ============
+            confirmDelete(bookId, bookTitle) {
+                appState.deleteTargetId = bookId;
+                document.getElementById('deleteBookTitle').textContent = bookTitle;
+                document.getElementById('deleteModal').classList.add('active');
+            }
+
+            closeDeleteModal() {
+                document.getElementById('deleteModal').classList.remove('active');
+                appState.deleteTargetId = null;
+            }
+
+            async handleDeleteBook() {
+                if (!appState.deleteTargetId) return;
+
+                const confirmBtn = document.getElementById('confirmDeleteBtn');
+                confirmBtn.disabled = true;
+                confirmBtn.innerHTML = '⏳ Deleting...';
+
+                try {
+                    await databaseService.deleteBook(appState.deleteTargetId);
+                    Utils.showNotification('Book deleted successfully!', 'success');
+                    this.closeDeleteModal();
+                    await this.updateStats();
+                } catch (error) {
+                    console.error('Error deleting book:', error);
+                    Utils.showNotification('Failed to delete book: ' + error.message, 'error');
+                } finally {
+                    confirmBtn.disabled = false;
+                    confirmBtn.innerHTML = '🗑️ Delete Permanently';
+                }
+            }
+
+            // ============ BOOKS TABLE ============
+            renderBooksTable() {
+                const searchQuery = document.getElementById('dashboardSearch').value.trim().toLowerCase();
+                let filteredBooks = appState.allBooks;
+
+                if (searchQuery) {
+                    filteredBooks = appState.allBooks.filter(book =>
+                        (book.title || '').toLowerCase().includes(searchQuery) ||
+                        (book.author || '').toLowerCase().includes(searchQuery) ||
+                        (book.category || '').toLowerCase().includes(searchQuery) ||
+                        (book.asin || '').toLowerCase().includes(searchQuery)
+                    );
+                }
+
+                const tbody = document.getElementById('booksTableBody');
+                document.getElementById('booksCount').textContent = filteredBooks.length + ' books';
+
+                if (filteredBooks.length === 0) {
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="7">
+                                <div class="empty-state">
+                                    <div class="empty-icon">📚</div>
+                                    <h3>${searchQuery ? 'No Books Found' : 'No Books Yet'}</h3>
+                                    <p>${searchQuery ? 'Try adjusting your search terms' : 'Start by adding your first book!'}</p>
+                                </div>
+                            </td>
+                        </tr>`;
+                    return;
+                }
+
+                tbody.innerHTML = filteredBooks.map(book => {
+                    const rating = (book.avgRating || 0).toFixed(1);
+                    const stars = '★'.repeat(Math.round(book.avgRating || 0)) + '☆'.repeat(5 - Math.round(book.avgRating || 0));
+                    const amazonLink = book.amazonLink || (book.asin ? `https://www.amazon.com/dp/${book.asin}` : '');
+                    const title = Utils.escapeHTML(book.title);
+                    const author = Utils.escapeHTML(book.author);
+                    const category = Utils.escapeHTML(book.category);
+
+                    return `
+                        <tr>
+                            <td>
+                                ${book.imageUrl 
+                                    ? `<img src="${book.imageUrl}" alt="" class="book-thumb" onerror="this.style.display='none';this.nextElementSibling.style.display='inline';"><span style="display:none;font-size:30px;">📖</span>` 
+                                    : '<span style="font-size:30px;">📖</span>'}
+                            </td>
+                            <td>
+                                <div class="book-title-cell" title="${title}">${title}</div>
+                            </td>
+                            <td>${author}</td>
+                            <td><span class="badge badge-success">${category}</span></td>
+                            <td>
+                                <span class="rating-stars">${stars}</span>
+                                <span style="font-weight:700;margin-left:4px;">${rating}</span>
+                            </td>
+                            <td>${book.asin ? `<code style="background:var(--input-bg);padding:4px 8px;border-radius:6px;font-size:12px;">${Utils.escapeHTML(book.asin)}</code>` : '<span style="color:var(--text-secondary);">-</span>'}</td>
+                            <td>
+                                <div class="actions-cell">
+                                    ${amazonLink ? `<a href="${amazonLink}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-warning" title="View on Amazon">🛒</a>` : ''}
+                                    <button class="btn btn-sm btn-danger" onclick="window.confirmDelete('${book.id}','${title.replace(/'/g, "\\'")}')" title="Delete book">🗑️</button>
+                                </div>
+                            </td>
+                        </tr>`;
+                }).join('');
+            }
+
+            // ============ CATEGORIES ============
+            renderCategories() {
+                const container = document.getElementById('categoriesList');
+                const categorySelect = document.getElementById('bookCategory');
+                
+                // Update select dropdown
+                categorySelect.innerHTML = '<option value="">Select category</option>';
+                appState.categories.forEach(cat => {
+                    categorySelect.innerHTML += `<option value="${cat.name}">${cat.emoji} ${cat.name}</option>`;
+                });
+
+                // Update categories grid
+                container.innerHTML = appState.categories.map(cat => `
+                    <div class="category-item">
+                        <span class="category-emoji-lg">${cat.emoji}</span>
+                        <div class="category-name-lg">${cat.name}</div>
+                    </div>
+                `).join('');
+
+                document.getElementById('catCountBadge').textContent = appState.categories.length + ' Categories';
+                document.getElementById('sidebarCatCount').textContent = appState.categories.length;
+                document.getElementById('statCategories').textContent = appState.categories.length;
+            }
+
+            // ============ STATS ============
+            async updateStats() {
+                // Total books
+                document.getElementById('statTotalBooks').textContent = appState.allBooks.length;
+                document.getElementById('sidebarBookCount').textContent = appState.allBooks.length;
+                document.getElementById('booksCount').textContent = appState.allBooks.length + ' books';
+
+                // Total reviews
+                const totalReviews = await databaseService.countAllReviews();
+                document.getElementById('statTotalReviews').textContent = totalReviews;
+
+                // Average rating
+                let totalRating = 0;
+                let ratedBooks = 0;
+                appState.allBooks.forEach(book => {
+                    if (book.avgRating > 0) {
+                        totalRating += book.avgRating;
+                        ratedBooks++;
+                    }
+                });
+                document.getElementById('statAvgRating').textContent = ratedBooks > 0 ? (totalRating / ratedBooks).toFixed(1) : '0.0';
+            }
+
+            // ============ INITIALIZATION ============
+            initializeDashboard() {
+                // Populate categories
+                this.renderCategories();
+
+                // Load books in real-time
+                this.booksUnsubscribe = databaseService.loadBooksRealtime((books, error) => {
+                    if (error) {
+                        console.error('Failed to load books:', error);
+                        return;
+                    }
+                    
+                    appState.allBooks = books;
+                    this.renderBooksTable();
+                    this.updateStats();
+                });
+
+                // Set initial page
+                this.navigateToPage('add-book');
+
+                // Focus on first input
+                setTimeout(() => {
+                    document.getElementById('bookTitle').focus();
+                }, 300);
+            }
+        }
+
+        // ============ GLOBAL INITIALIZATION ============
+        const appState = new AppState();
+        const databaseService = new DatabaseService();
+        const adminUI = new AdminUIController();
+
+        // Expose functions globally for onclick handlers
+        window.removeImage = () => adminUI.removeImage();
+        window.confirmDelete = (id, title) => adminUI.confirmDelete(id, title);
+
+        // Handle page unload
+        window.addEventListener('beforeunload', () => {
+            if (adminUI.booksUnsubscribe) {
+                adminUI.booksUnsubscribe();
+            }
+        });
+
+        console.log('🚀 Admin Dashboard Ready');
+        console.log('📚 Categories:', appState.categories.length);
+        console.log('🔐 Auth:', appState.isAuthenticated ? 'Yes' : 'No');
+    </script>
+</body>
+</html>
