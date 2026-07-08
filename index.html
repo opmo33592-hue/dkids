@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#1F4B43">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>Admin Dashboard - SCHILDREN HAVE A LIBRARY</title>
+    <title>Admin Dashboard - CHILDREN HAVE A LIBRARY</title>
     <meta name="description" content="Story Forest Admin Dashboard - Manage your children's book library">
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -17,6 +17,7 @@
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
     
     <style>
         :root {
@@ -762,19 +763,7 @@
             color: var(--text-primary);
         }
 
-        .hint-text {
-            color: var(--text-secondary);
-            font-size: 12px;
-            margin-top: 8px;
-            display: block;
-            font-weight: 500;
-        }
-
-        .hint-text strong {
-            color: var(--coral);
-        }
-
-        /* ============ IMAGE UPLOAD ============ */
+        /* ============ IMAGE & PDF UPLOAD ============ */
         .image-upload-area {
             border: 3px dashed var(--border);
             border-radius: 20px;
@@ -847,6 +836,35 @@
             object-fit: cover;
         }
 
+        .pdf-preview-item {
+            position: relative;
+            width: 140px;
+            height: 180px;
+            border-radius: 16px;
+            overflow: hidden;
+            border: 2px solid var(--border);
+            box-shadow: var(--shadow-card);
+            animation: fadeInUp 0.3s ease;
+            background: var(--input-bg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .pdf-preview-item .pdf-icon {
+            font-size: 48px;
+        }
+
+        .pdf-preview-item .pdf-name {
+            font-size: 11px;
+            color: var(--text-secondary);
+            text-align: center;
+            padding: 0 8px;
+            word-break: break-all;
+        }
+
         .remove-image {
             position: absolute;
             top: 8px;
@@ -865,6 +883,7 @@
             transition: all 0.3s ease;
             box-shadow: 0 4px 12px rgba(255,82,82,0.4);
             border: 2px solid white;
+            z-index: 5;
         }
 
         .remove-image:hover {
@@ -1437,7 +1456,7 @@
         <div class="login-box">
             <div class="login-logo">🦊</div>
             <h1 class="login-title">Admin Dashboard</h1>
-            <p class="login-subtitle">CHILDREN HAVE A LIBRARY- Book Management</p>
+            <p class="login-subtitle">CHILDREN HAVE A LIBRARY - Book Management</p>
             <div class="login-error" id="loginError">Invalid credentials. Please try again.</div>
             <div class="input-group">
                 <label>📧 Email Address</label>
@@ -1461,7 +1480,7 @@
         <div class="top-bar-mobile-content">
             <div class="mobile-brand">
                 <div class="mobile-logo-icon">🦊</div>
-                <span class="mobile-brand-text"> CHILDREN HAVE A LIBRARY</span>
+                <span class="mobile-brand-text">CHILDREN HAVE A LIBRARY</span>
             </div>
             <div class="mobile-actions">
                 <button class="mobile-icon-btn" id="themeToggleMobile" aria-label="Toggle theme">🌙</button>
@@ -1575,20 +1594,18 @@
                             </select>
                         </div>
                         <div class="form-group">
-                            <label>🛒 Amazon ASIN</label>
-                            <input type="text" id="bookAsin" placeholder="e.g., B0XXXXXXX">
-                            <span class="hint-text">Find ASIN in Amazon URL: amazon.com/dp/<strong>B0XXXXXXX</strong></span>
+                            <label>📖 ISBN</label>
+                            <input type="text" id="bookISBN" placeholder="e.g., 978-3-16-148410-0">
                         </div>
                         <div class="form-group full-width">
-                            <label>🔗 Amazon Link (Optional)</label>
-                            <input type="url" id="bookAmazonLink" placeholder="https://www.amazon.com/dp/B0XXXXXXX">
-                            <span class="hint-text">This link opens when users click the book cover</span>
+                            <label>📝 Caption / Description</label>
+                            <textarea id="bookCaption" placeholder="Enter book caption or description..." rows="4"></textarea>
                         </div>
                         <div class="form-group full-width">
                             <label>🖼️ Book Cover Image</label>
                             <div class="image-upload-area" id="imageUploadArea">
                                 <div class="upload-icon">📸</div>
-                                <div class="upload-text">Click or drag & drop to upload</div>
+                                <div class="upload-text">Click or drag & drop to upload image</div>
                                 <div class="upload-hint">JPG, PNG or WebP (max 2MB - stored as Base64)</div>
                                 <input type="file" id="imageInput" accept="image/*" style="display:none;">
                             </div>
@@ -1596,7 +1613,19 @@
                             <div class="progress-bar" id="uploadProgress">
                                 <div class="progress-bar-fill" id="progressFill"></div>
                             </div>
-                            <span class="hint-text">Image will be converted to Base64 and stored in Firestore (max ~2MB recommended)</span>
+                        </div>
+                        <div class="form-group full-width">
+                            <label>📄 PDF File (Optional)</label>
+                            <div class="image-upload-area" id="pdfUploadArea">
+                                <div class="upload-icon">📄</div>
+                                <div class="upload-text">Click or drag & drop to upload PDF</div>
+                                <div class="upload-hint">PDF files only (max 10MB - stored as Base64)</div>
+                                <input type="file" id="pdfInput" accept=".pdf" style="display:none;">
+                            </div>
+                            <div class="image-preview" id="pdfPreview"></div>
+                            <div class="progress-bar" id="pdfUploadProgress">
+                                <div class="progress-bar-fill" id="pdfProgressFill"></div>
+                            </div>
                         </div>
                         <div class="form-group full-width">
                             <div class="btn-group">
@@ -1628,13 +1657,14 @@
                                     <th>Author</th>
                                     <th>Category</th>
                                     <th>Rating</th>
-                                    <th>ASIN</th>
+                                    <th>ISBN</th>
+                                    <th>PDF</th>
                                     <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody id="booksTableBody">
                                 <tr>
-                                    <td colspan="7">
+                                    <td colspan="8">
                                         <div class="loading-container">
                                             <div class="loading-spinner"></div>
                                             <p style="margin-top:16px;color:var(--text-secondary);">Loading books...</p>
@@ -1702,7 +1732,8 @@
                 password: 'admin123'
             },
             notificationTimeout: 3000,
-            maxImageSize: 2 * 1024 * 1024 // 2MB
+            maxImageSize: 2 * 1024 * 1024, // 2MB
+            maxPDFSize: 10 * 1024 * 1024 // 10MB
         };
 
         // ============ UTILITY FUNCTIONS ============
@@ -1728,18 +1759,6 @@
                 }, CONFIG.notificationTimeout);
             }
 
-            static debounce(func, delay = 300) {
-                let timeout;
-                return function executedFunction(...args) {
-                    const later = () => {
-                        clearTimeout(timeout);
-                        func(...args);
-                    };
-                    clearTimeout(timeout);
-                    timeout = setTimeout(later, delay);
-                };
-            }
-
             static formatFileSize(bytes) {
                 if (bytes < 1024) return bytes + ' B';
                 if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
@@ -1753,6 +1772,8 @@
                 this.allBooks = [];
                 this.deleteTargetId = null;
                 this.selectedImageData = null;
+                this.selectedPDFData = null;
+                this.selectedPDFName = null;
                 this.isAuthenticated = false;
                 this.currentPage = 'add-book';
                 
@@ -1781,7 +1802,6 @@
                     }
                     this.db = firebase.firestore();
                     
-                    // Enable offline persistence
                     this.db.enablePersistence().catch(err => {
                         console.warn('Offline persistence not available:', err.code);
                     });
@@ -1818,9 +1838,11 @@
                                 title: data.title || 'Untitled',
                                 author: data.author || 'Unknown',
                                 category: data.category || '',
-                                asin: data.asin || '',
-                                amazonLink: data.amazonLink || '',
+                                isbn: data.isbn || '',
+                                caption: data.caption || '',
                                 imageUrl: data.imageUrl || '',
+                                pdfUrl: data.pdfUrl || '',
+                                pdfName: data.pdfName || '',
                                 avgRating: data.avgRating || 0,
                                 createdAt: data.createdAt
                             });
@@ -1834,7 +1856,6 @@
 
             async deleteBook(bookId) {
                 try {
-                    // Delete all reviews first
                     const reviewsSnap = await this.db.collection(CONFIG.collections.books)
                         .doc(bookId)
                         .collection(CONFIG.collections.reviews)
@@ -1844,7 +1865,6 @@
                     reviewsSnap.forEach(doc => batch.delete(doc.ref));
                     await batch.commit();
                     
-                    // Delete the book
                     await this.db.collection(CONFIG.collections.books).doc(bookId).delete();
                     console.log('✅ Book deleted:', bookId);
                     return true;
@@ -1888,16 +1908,13 @@
             }
 
             setupEventListeners() {
-                // Login
                 document.getElementById('loginBtn').addEventListener('click', () => this.handleLogin());
                 document.getElementById('loginPassword').addEventListener('keypress', e => {
                     if (e.key === 'Enter') this.handleLogin();
                 });
 
-                // Logout
                 document.getElementById('logoutBtn').addEventListener('click', () => this.handleLogout());
 
-                // Sidebar navigation
                 document.querySelectorAll('.sidebar-menu a[data-page]').forEach(link => {
                     link.addEventListener('click', e => {
                         e.preventDefault();
@@ -1907,34 +1924,28 @@
                     });
                 });
 
-                // Mobile menu
                 document.getElementById('menuToggleMobile').addEventListener('click', () => this.toggleMobileSidebar());
                 this.sidebarOverlay.addEventListener('click', () => this.closeMobileSidebar());
 
-                // Theme toggles
                 document.getElementById('themeToggle').addEventListener('click', () => this.toggleTheme());
                 document.getElementById('themeToggleMobile').addEventListener('click', () => this.toggleTheme());
 
-                // Delete modal
                 document.getElementById('closeDeleteModal').addEventListener('click', () => this.closeDeleteModal());
                 document.getElementById('cancelDeleteBtn').addEventListener('click', () => this.closeDeleteModal());
                 document.getElementById('confirmDeleteBtn').addEventListener('click', () => this.handleDeleteBook());
 
-                // Form handlers
                 document.getElementById('addBookForm').addEventListener('submit', e => {
                     e.preventDefault();
                     this.handleAddBook();
                 });
                 document.getElementById('clearFormBtn').addEventListener('click', () => this.clearForm());
 
-                // Search
                 const debouncedSearch = Utils.debounce(() => this.renderBooksTable());
                 document.getElementById('dashboardSearch').addEventListener('input', debouncedSearch);
 
-                // Image upload
                 this.setupImageUpload();
+                this.setupPDFUpload();
 
-                // Keyboard shortcuts
                 document.addEventListener('keydown', e => {
                     if (e.key === 'Escape') {
                         this.closeDeleteModal();
@@ -1942,7 +1953,6 @@
                     }
                 });
 
-                // Close sidebar on window resize
                 window.addEventListener('resize', () => {
                     if (window.innerWidth > 1024) {
                         this.closeMobileSidebar();
@@ -2013,12 +2023,10 @@
             navigateToPage(page) {
                 appState.currentPage = page;
                 
-                // Update active link
                 document.querySelectorAll('.sidebar-menu a[data-page]').forEach(link => {
                     link.classList.toggle('active', link.dataset.page === page);
                 });
 
-                // Show/hide pages
                 document.querySelectorAll('.page-content').forEach(pc => {
                     pc.style.display = 'none';
                 });
@@ -2026,7 +2034,6 @@
                 const targetPage = document.getElementById('page-' + page);
                 if (targetPage) targetPage.style.display = 'block';
 
-                // Update header
                 const titles = {
                     'add-book': 'Add New Book',
                     'manage-books': 'Manage Books',
@@ -2104,7 +2111,7 @@
                     e.preventDefault();
                     uploadArea.classList.remove('dragover');
                     const file = e.dataTransfer.files[0];
-                    if (file) this.handleImageSelect(file);
+                    if (file && file.type.match('image.*')) this.handleImageSelect(file);
                 });
 
                 imageInput.addEventListener('change', e => {
@@ -2150,13 +2157,12 @@
                         </div>`;
                     
                     const sizeKB = (appState.selectedImageData.length / 1024).toFixed(1);
-                    console.log(`✅ Image loaded: ${sizeKB}KB`);
-                    Utils.showNotification(`Image loaded successfully (${sizeKB}KB)`, 'success');
+                    Utils.showNotification(`Image loaded (${sizeKB}KB)`, 'success');
                 };
 
                 reader.onerror = () => {
                     progressBar.style.display = 'none';
-                    Utils.showNotification('Error reading file. Please try again.', 'error');
+                    Utils.showNotification('Error reading file', 'error');
                 };
 
                 reader.readAsDataURL(file);
@@ -2169,13 +2175,101 @@
                 document.getElementById('uploadProgress').style.display = 'none';
             }
 
+            // ============ PDF UPLOAD ============
+            setupPDFUpload() {
+                const uploadArea = document.getElementById('pdfUploadArea');
+                const pdfInput = document.getElementById('pdfInput');
+
+                uploadArea.addEventListener('click', () => pdfInput.click());
+
+                uploadArea.addEventListener('dragover', e => {
+                    e.preventDefault();
+                    uploadArea.classList.add('dragover');
+                });
+
+                uploadArea.addEventListener('dragleave', () => {
+                    uploadArea.classList.remove('dragover');
+                });
+
+                uploadArea.addEventListener('drop', e => {
+                    e.preventDefault();
+                    uploadArea.classList.remove('dragover');
+                    const file = e.dataTransfer.files[0];
+                    if (file && file.type === 'application/pdf') this.handlePDFSelect(file);
+                });
+
+                pdfInput.addEventListener('change', e => {
+                    const file = e.target.files[0];
+                    if (file) this.handlePDFSelect(file);
+                });
+            }
+
+            handlePDFSelect(file) {
+                if (file.type !== 'application/pdf') {
+                    Utils.showNotification('Please select a PDF file', 'error');
+                    return;
+                }
+
+                if (file.size > CONFIG.maxPDFSize) {
+                    Utils.showNotification(`PDF too large! Max size is ${Utils.formatFileSize(CONFIG.maxPDFSize)}`, 'error');
+                    return;
+                }
+
+                const progressBar = document.getElementById('pdfUploadProgress');
+                const progressFill = document.getElementById('pdfProgressFill');
+                progressBar.style.display = 'block';
+                progressFill.style.width = '0%';
+
+                const reader = new FileReader();
+                
+                reader.onprogress = (e) => {
+                    if (e.lengthComputable) {
+                        const percent = (e.loaded / e.total) * 100;
+                        progressFill.style.width = percent + '%';
+                    }
+                };
+
+                reader.onload = (e) => {
+                    appState.selectedPDFData = e.target.result;
+                    appState.selectedPDFName = file.name;
+                    progressBar.style.display = 'none';
+                    
+                    const preview = document.getElementById('pdfPreview');
+                    const sizeKB = (appState.selectedPDFData.length / 1024).toFixed(1);
+                    preview.innerHTML = `
+                        <div class="pdf-preview-item">
+                            <span class="pdf-icon">📄</span>
+                            <span class="pdf-name">${Utils.escapeHTML(file.name)}</span>
+                            <span style="font-size:10px;color:var(--text-secondary);">${sizeKB}KB</span>
+                            <span class="remove-image" onclick="window.removePDF()">✕</span>
+                        </div>`;
+                    
+                    Utils.showNotification(`PDF loaded (${sizeKB}KB)`, 'success');
+                };
+
+                reader.onerror = () => {
+                    progressBar.style.display = 'none';
+                    Utils.showNotification('Error reading file', 'error');
+                };
+
+                reader.readAsDataURL(file);
+            }
+
+            removePDF() {
+                appState.selectedPDFData = null;
+                appState.selectedPDFName = null;
+                document.getElementById('pdfPreview').innerHTML = '';
+                document.getElementById('pdfInput').value = '';
+                document.getElementById('pdfUploadProgress').style.display = 'none';
+            }
+
             // ============ FORM HANDLERS ============
             async handleAddBook() {
                 const title = document.getElementById('bookTitle').value.trim();
                 const author = document.getElementById('bookAuthor').value.trim();
                 const category = document.getElementById('bookCategory').value;
-                const asin = document.getElementById('bookAsin').value.trim();
-                const amazonLink = document.getElementById('bookAmazonLink').value.trim();
+                const isbn = document.getElementById('bookISBN').value.trim();
+                const caption = document.getElementById('bookCaption').value.trim();
 
                 if (!title || !author || !category) {
                     Utils.showNotification('Please fill in all required fields (*)', 'error');
@@ -2191,9 +2285,11 @@
                         title,
                         author,
                         category,
-                        asin: asin || '',
-                        amazonLink: amazonLink || '',
+                        isbn: isbn || '',
+                        caption: caption || '',
                         imageUrl: appState.selectedImageData || '',
+                        pdfUrl: appState.selectedPDFData || '',
+                        pdfName: appState.selectedPDFName || '',
                         avgRating: 0
                     };
 
@@ -2201,8 +2297,6 @@
                     
                     Utils.showNotification('Book added successfully! 🎉', 'success');
                     this.clearForm();
-                    
-                    // Update stats
                     await this.updateStats();
                     
                 } catch (error) {
@@ -2221,6 +2315,7 @@
             clearForm() {
                 document.getElementById('addBookForm').reset();
                 this.removeImage();
+                this.removePDF();
                 document.getElementById('bookTitle').focus();
             }
 
@@ -2267,7 +2362,8 @@
                         (book.title || '').toLowerCase().includes(searchQuery) ||
                         (book.author || '').toLowerCase().includes(searchQuery) ||
                         (book.category || '').toLowerCase().includes(searchQuery) ||
-                        (book.asin || '').toLowerCase().includes(searchQuery)
+                        (book.isbn || '').toLowerCase().includes(searchQuery) ||
+                        (book.caption || '').toLowerCase().includes(searchQuery)
                     );
                 }
 
@@ -2277,7 +2373,7 @@
                 if (filteredBooks.length === 0) {
                     tbody.innerHTML = `
                         <tr>
-                            <td colspan="7">
+                            <td colspan="8">
                                 <div class="empty-state">
                                     <div class="empty-icon">📚</div>
                                     <h3>${searchQuery ? 'No Books Found' : 'No Books Yet'}</h3>
@@ -2291,7 +2387,6 @@
                 tbody.innerHTML = filteredBooks.map(book => {
                     const rating = (book.avgRating || 0).toFixed(1);
                     const stars = '★'.repeat(Math.round(book.avgRating || 0)) + '☆'.repeat(5 - Math.round(book.avgRating || 0));
-                    const amazonLink = book.amazonLink || (book.asin ? `https://www.amazon.com/dp/${book.asin}` : '');
                     const title = Utils.escapeHTML(book.title);
                     const author = Utils.escapeHTML(book.author);
                     const category = Utils.escapeHTML(book.category);
@@ -2312,10 +2407,11 @@
                                 <span class="rating-stars">${stars}</span>
                                 <span style="font-weight:700;margin-left:4px;">${rating}</span>
                             </td>
-                            <td>${book.asin ? `<code style="background:var(--input-bg);padding:4px 8px;border-radius:6px;font-size:12px;">${Utils.escapeHTML(book.asin)}</code>` : '<span style="color:var(--text-secondary);">-</span>'}</td>
+                            <td>${book.isbn ? `<code style="background:var(--input-bg);padding:4px 8px;border-radius:6px;font-size:12px;">${Utils.escapeHTML(book.isbn)}</code>` : '<span style="color:var(--text-secondary);">-</span>'}</td>
+                            <td>${book.pdfUrl ? '<span class="badge badge-warning">📄 PDF</span>' : '<span style="color:var(--text-secondary);">-</span>'}</td>
                             <td>
                                 <div class="actions-cell">
-                                    ${amazonLink ? `<a href="${amazonLink}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-warning" title="View on Amazon">🛒</a>` : ''}
+                                    ${book.pdfUrl ? `<a href="${book.pdfUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-warning" title="View PDF">📄</a>` : ''}
                                     <button class="btn btn-sm btn-danger" onclick="window.confirmDelete('${book.id}','${title.replace(/'/g, "\\'")}')" title="Delete book">🗑️</button>
                                 </div>
                             </td>
@@ -2328,13 +2424,11 @@
                 const container = document.getElementById('categoriesList');
                 const categorySelect = document.getElementById('bookCategory');
                 
-                // Update select dropdown
                 categorySelect.innerHTML = '<option value="">Select category</option>';
                 appState.categories.forEach(cat => {
                     categorySelect.innerHTML += `<option value="${cat.name}">${cat.emoji} ${cat.name}</option>`;
                 });
 
-                // Update categories grid
                 container.innerHTML = appState.categories.map(cat => `
                     <div class="category-item">
                         <span class="category-emoji-lg">${cat.emoji}</span>
@@ -2349,16 +2443,13 @@
 
             // ============ STATS ============
             async updateStats() {
-                // Total books
                 document.getElementById('statTotalBooks').textContent = appState.allBooks.length;
                 document.getElementById('sidebarBookCount').textContent = appState.allBooks.length;
                 document.getElementById('booksCount').textContent = appState.allBooks.length + ' books';
 
-                // Total reviews
                 const totalReviews = await databaseService.countAllReviews();
                 document.getElementById('statTotalReviews').textContent = totalReviews;
 
-                // Average rating
                 let totalRating = 0;
                 let ratedBooks = 0;
                 appState.allBooks.forEach(book => {
@@ -2372,10 +2463,8 @@
 
             // ============ INITIALIZATION ============
             initializeDashboard() {
-                // Populate categories
                 this.renderCategories();
 
-                // Load books in real-time
                 this.booksUnsubscribe = databaseService.loadBooksRealtime((books, error) => {
                     if (error) {
                         console.error('Failed to load books:', error);
@@ -2387,10 +2476,8 @@
                     this.updateStats();
                 });
 
-                // Set initial page
                 this.navigateToPage('add-book');
 
-                // Focus on first input
                 setTimeout(() => {
                     document.getElementById('bookTitle').focus();
                 }, 300);
@@ -2402,11 +2489,10 @@
         const databaseService = new DatabaseService();
         const adminUI = new AdminUIController();
 
-        // Expose functions globally for onclick handlers
         window.removeImage = () => adminUI.removeImage();
+        window.removePDF = () => adminUI.removePDF();
         window.confirmDelete = (id, title) => adminUI.confirmDelete(id, title);
 
-        // Handle page unload
         window.addEventListener('beforeunload', () => {
             if (adminUI.booksUnsubscribe) {
                 adminUI.booksUnsubscribe();
@@ -2414,8 +2500,6 @@
         });
 
         console.log('🚀 Admin Dashboard Ready');
-        console.log('📚 Categories:', appState.categories.length);
-        console.log('🔐 Auth:', appState.isAuthenticated ? 'Yes' : 'No');
     </script>
 </body>
 </html>
