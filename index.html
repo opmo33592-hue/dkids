@@ -16,7 +16,6 @@
     
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
     
     <style>
@@ -1606,7 +1605,7 @@
                             <div class="image-upload-area" id="imageUploadArea">
                                 <div class="upload-icon">📸</div>
                                 <div class="upload-text">Click or drag & drop to upload image</div>
-                                <div class="upload-hint">JPG, PNG or WebP (max 2MB - stored as Base64)</div>
+                                <div class="upload-hint">JPG, PNG or WebP (max 2MB)</div>
                                 <input type="file" id="imageInput" accept="image/*" style="display:none;">
                             </div>
                             <div class="image-preview" id="imagePreview"></div>
@@ -1619,7 +1618,7 @@
                             <div class="image-upload-area" id="pdfUploadArea">
                                 <div class="upload-icon">📄</div>
                                 <div class="upload-text">Click or drag & drop to upload PDF</div>
-                                <div class="upload-hint">PDF files only (max 10MB - stored as Base64)</div>
+                                <div class="upload-hint">PDF files only (max 10MB)</div>
                                 <input type="file" id="pdfInput" accept=".pdf" style="display:none;">
                             </div>
                             <div class="image-preview" id="pdfPreview"></div>
@@ -1764,6 +1763,18 @@
                 if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
                 return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
             }
+
+            static debounce(func, wait = 300) {
+                let timeout;
+                return function executedFunction(...args) {
+                    const later = () => {
+                        clearTimeout(timeout);
+                        func(...args);
+                    };
+                    clearTimeout(timeout);
+                    timeout = setTimeout(later, wait);
+                };
+            }
         }
 
         // ============ STATE MANAGEMENT ============
@@ -1771,9 +1782,8 @@
             constructor() {
                 this.allBooks = [];
                 this.deleteTargetId = null;
-                this.selectedImageData = null;
-                this.selectedPDFData = null;
-                this.selectedPDFName = null;
+                this.selectedImageFile = null;
+                this.selectedPDFFile = null;
                 this.isAuthenticated = false;
                 this.currentPage = 'add-book';
                 
@@ -1801,6 +1811,7 @@
                         firebase.initializeApp(CONFIG.firebase);
                     }
                     this.db = firebase.firestore();
+                    this.storage = firebase.storage();
                     
                     this.db.enablePersistence().catch(err => {
                         console.warn('Offline persistence not available:', err.code);
@@ -1809,6 +1820,40 @@
                     console.log('✅ Database Service Initialized');
                 } catch (error) {
                     console.error('❌ Database initialization failed:', error);
+                }
+            }
+
+            async uploadFile(file, path) {
+                const storageRef = this.storage.ref(path);
+                const uploadTask = storageRef.put(file);
+                
+                return new Promise((resolve, reject) => {
+                    uploadTask.on('state_changed',
+                        (snapshot) => {
+                            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                            console.log('Upload progress:', progress + '%');
+                        },
+                        (error) => {
+                            console.error('Upload error:', error);
+                            reject(error);
+                        },
+                        async () => {
+                            const downloadURL = await uploadTask.snapshot.ref.getDownloadURL();
+                            console.log('File available at:', downloadURL);
+                            resolve(downloadURL);
+                        }
+                    );
+                });
+            }
+
+            async deleteFile(url) {
+                if (!url) return;
+                try {
+                    const storageRef = this.storage.refFromURL(url);
+                    await storageRef.delete();
+                    console.log('✅ File deleted from storage');
+                } catch (error) {
+                    console.warn('Could not delete file:', error.message);
                 }
             }
 
@@ -1854,8 +1899,13 @@
                     });
             }
 
-            async deleteBook(bookId) {
+            async deleteBook(bookId, imageUrl, pdfUrl) {
                 try {
+                    // Delete files from storage
+                    if (imageUrl) await this.deleteFile(imageUrl);
+                    if (pdfUrl) await this.deleteFile(pdfUrl);
+
+                    // Delete reviews
                     const reviewsSnap = await this.db.collection(CONFIG.collections.books)
                         .doc(bookId)
                         .collection(CONFIG.collections.reviews)
@@ -1865,6 +1915,7 @@
                     reviewsSnap.forEach(doc => batch.delete(doc.ref));
                     await batch.commit();
                     
+                    // Delete book document
                     await this.db.collection(CONFIG.collections.books).doc(bookId).delete();
                     console.log('✅ Book deleted:', bookId);
                     return true;
@@ -2131,48 +2182,26 @@
                     return;
                 }
 
-                const progressBar = document.getElementById('uploadProgress');
-                const progressFill = document.getElementById('progressFill');
-                progressBar.style.display = 'block';
-                progressFill.style.width = '0%';
+                appState.selectedImageFile = file;
 
                 const reader = new FileReader();
-                
-                reader.onprogress = (e) => {
-                    if (e.lengthComputable) {
-                        const percent = (e.loaded / e.total) * 100;
-                        progressFill.style.width = percent + '%';
-                    }
-                };
-
                 reader.onload = (e) => {
-                    appState.selectedImageData = e.target.result;
-                    progressBar.style.display = 'none';
-                    
                     const preview = document.getElementById('imagePreview');
                     preview.innerHTML = `
                         <div class="image-preview-item">
-                            <img src="${appState.selectedImageData}" alt="Preview">
+                            <img src="${e.target.result}" alt="Preview">
                             <span class="remove-image" onclick="window.removeImage()">✕</span>
                         </div>`;
-                    
-                    const sizeKB = (appState.selectedImageData.length / 1024).toFixed(1);
-                    Utils.showNotification(`Image loaded (${sizeKB}KB)`, 'success');
                 };
-
-                reader.onerror = () => {
-                    progressBar.style.display = 'none';
-                    Utils.showNotification('Error reading file', 'error');
-                };
-
                 reader.readAsDataURL(file);
+                
+                Utils.showNotification(`Image selected: ${file.name} (${Utils.formatFileSize(file.size)})`, 'success');
             }
 
             removeImage() {
-                appState.selectedImageData = null;
+                appState.selectedImageFile = null;
                 document.getElementById('imagePreview').innerHTML = '';
                 document.getElementById('imageInput').value = '';
-                document.getElementById('uploadProgress').style.display = 'none';
             }
 
             // ============ PDF UPLOAD ============
@@ -2215,52 +2244,24 @@
                     return;
                 }
 
-                const progressBar = document.getElementById('pdfUploadProgress');
-                const progressFill = document.getElementById('pdfProgressFill');
-                progressBar.style.display = 'block';
-                progressFill.style.width = '0%';
+                appState.selectedPDFFile = file;
 
-                const reader = new FileReader();
+                const preview = document.getElementById('pdfPreview');
+                preview.innerHTML = `
+                    <div class="pdf-preview-item">
+                        <span class="pdf-icon">📄</span>
+                        <span class="pdf-name">${Utils.escapeHTML(file.name)}</span>
+                        <span style="font-size:10px;color:var(--text-secondary);">${Utils.formatFileSize(file.size)}</span>
+                        <span class="remove-image" onclick="window.removePDF()">✕</span>
+                    </div>`;
                 
-                reader.onprogress = (e) => {
-                    if (e.lengthComputable) {
-                        const percent = (e.loaded / e.total) * 100;
-                        progressFill.style.width = percent + '%';
-                    }
-                };
-
-                reader.onload = (e) => {
-                    appState.selectedPDFData = e.target.result;
-                    appState.selectedPDFName = file.name;
-                    progressBar.style.display = 'none';
-                    
-                    const preview = document.getElementById('pdfPreview');
-                    const sizeKB = (appState.selectedPDFData.length / 1024).toFixed(1);
-                    preview.innerHTML = `
-                        <div class="pdf-preview-item">
-                            <span class="pdf-icon">📄</span>
-                            <span class="pdf-name">${Utils.escapeHTML(file.name)}</span>
-                            <span style="font-size:10px;color:var(--text-secondary);">${sizeKB}KB</span>
-                            <span class="remove-image" onclick="window.removePDF()">✕</span>
-                        </div>`;
-                    
-                    Utils.showNotification(`PDF loaded (${sizeKB}KB)`, 'success');
-                };
-
-                reader.onerror = () => {
-                    progressBar.style.display = 'none';
-                    Utils.showNotification('Error reading file', 'error');
-                };
-
-                reader.readAsDataURL(file);
+                Utils.showNotification(`PDF selected: ${file.name} (${Utils.formatFileSize(file.size)})`, 'success');
             }
 
             removePDF() {
-                appState.selectedPDFData = null;
-                appState.selectedPDFName = null;
+                appState.selectedPDFFile = null;
                 document.getElementById('pdfPreview').innerHTML = '';
                 document.getElementById('pdfInput').value = '';
-                document.getElementById('pdfUploadProgress').style.display = 'none';
             }
 
             // ============ FORM HANDLERS ============
@@ -2278,7 +2279,7 @@
 
                 const submitBtn = document.getElementById('submitBookBtn');
                 submitBtn.disabled = true;
-                submitBtn.innerHTML = '⏳ Adding Book...';
+                submitBtn.innerHTML = '⏳ Uploading & Adding Book...';
 
                 try {
                     const bookData = {
@@ -2287,12 +2288,28 @@
                         category,
                         isbn: isbn || '',
                         caption: caption || '',
-                        imageUrl: appState.selectedImageData || '',
-                        pdfUrl: appState.selectedPDFData || '',
-                        pdfName: appState.selectedPDFName || '',
+                        imageUrl: '',
+                        pdfUrl: '',
+                        pdfName: '',
                         avgRating: 0
                     };
 
+                    // Upload image to Firebase Storage
+                    if (appState.selectedImageFile) {
+                        const imagePath = `books/${Date.now()}_${appState.selectedImageFile.name}`;
+                        bookData.imageUrl = await databaseService.uploadFile(appState.selectedImageFile, imagePath);
+                        console.log('✅ Image uploaded:', bookData.imageUrl);
+                    }
+
+                    // Upload PDF to Firebase Storage
+                    if (appState.selectedPDFFile) {
+                        const pdfPath = `pdfs/${Date.now()}_${appState.selectedPDFFile.name}`;
+                        bookData.pdfUrl = await databaseService.uploadFile(appState.selectedPDFFile, pdfPath);
+                        bookData.pdfName = appState.selectedPDFFile.name;
+                        console.log('✅ PDF uploaded:', bookData.pdfUrl);
+                    }
+
+                    // Save book data to Firestore
                     await databaseService.addBook(bookData);
                     
                     Utils.showNotification('Book added successfully! 🎉', 'success');
@@ -2301,11 +2318,7 @@
                     
                 } catch (error) {
                     console.error('Error adding book:', error);
-                    if (error.message.includes('permission-denied')) {
-                        Utils.showNotification('Permission denied! Check Firebase security rules.', 'error');
-                    } else {
-                        Utils.showNotification('Failed to add book: ' + error.message, 'error');
-                    }
+                    Utils.showNotification('Failed to add book: ' + error.message, 'error');
                 } finally {
                     submitBtn.disabled = false;
                     submitBtn.innerHTML = '📚 Add Book to Library';
@@ -2320,8 +2333,10 @@
             }
 
             // ============ DELETE HANDLER ============
-            confirmDelete(bookId, bookTitle) {
+            confirmDelete(bookId, bookTitle, imageUrl, pdfUrl) {
                 appState.deleteTargetId = bookId;
+                appState.deleteTargetImageUrl = imageUrl;
+                appState.deleteTargetPdfUrl = pdfUrl;
                 document.getElementById('deleteBookTitle').textContent = bookTitle;
                 document.getElementById('deleteModal').classList.add('active');
             }
@@ -2329,6 +2344,8 @@
             closeDeleteModal() {
                 document.getElementById('deleteModal').classList.remove('active');
                 appState.deleteTargetId = null;
+                appState.deleteTargetImageUrl = null;
+                appState.deleteTargetPdfUrl = null;
             }
 
             async handleDeleteBook() {
@@ -2339,7 +2356,11 @@
                 confirmBtn.innerHTML = '⏳ Deleting...';
 
                 try {
-                    await databaseService.deleteBook(appState.deleteTargetId);
+                    await databaseService.deleteBook(
+                        appState.deleteTargetId,
+                        appState.deleteTargetImageUrl,
+                        appState.deleteTargetPdfUrl
+                    );
                     Utils.showNotification('Book deleted successfully!', 'success');
                     this.closeDeleteModal();
                     await this.updateStats();
@@ -2395,7 +2416,7 @@
                         <tr>
                             <td>
                                 ${book.imageUrl 
-                                    ? `<img src="${book.imageUrl}" alt="" class="book-thumb" onerror="this.style.display='none';this.nextElementSibling.style.display='inline';"><span style="display:none;font-size:30px;">📖</span>` 
+                                    ? `<img src="${book.imageUrl}" alt="" class="book-thumb" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='inline';"><span style="display:none;font-size:30px;">📖</span>` 
                                     : '<span style="font-size:30px;">📖</span>'}
                             </td>
                             <td>
@@ -2412,7 +2433,7 @@
                             <td>
                                 <div class="actions-cell">
                                     ${book.pdfUrl ? `<a href="${book.pdfUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-warning" title="View PDF">📄</a>` : ''}
-                                    <button class="btn btn-sm btn-danger" onclick="window.confirmDelete('${book.id}','${title.replace(/'/g, "\\'")}')" title="Delete book">🗑️</button>
+                                    <button class="btn btn-sm btn-danger" onclick="window.confirmDelete('${book.id}','${title.replace(/'/g, "\\'")}','${(book.imageUrl || '').replace(/'/g, "\\'")}','${(book.pdfUrl || '').replace(/'/g, "\\'")}')" title="Delete book">🗑️</button>
                                 </div>
                             </td>
                         </tr>`;
@@ -2491,7 +2512,7 @@
 
         window.removeImage = () => adminUI.removeImage();
         window.removePDF = () => adminUI.removePDF();
-        window.confirmDelete = (id, title) => adminUI.confirmDelete(id, title);
+        window.confirmDelete = (id, title, imageUrl, pdfUrl) => adminUI.confirmDelete(id, title, imageUrl, pdfUrl);
 
         window.addEventListener('beforeunload', () => {
             if (adminUI.booksUnsubscribe) {
@@ -2499,7 +2520,7 @@
             }
         });
 
-        console.log('🚀 Admin Dashboard Ready');
+        console.log('🚀 Admin Dashboard Ready - Firebase Storage Enabled');
     </script>
 </body>
 </html>
