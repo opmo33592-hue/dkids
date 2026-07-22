@@ -16,6 +16,7 @@
     
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
     
     <style>
         :root {
@@ -315,15 +316,15 @@
                         <div class="form-group full-width"><label>📝 Caption / Description</label><textarea id="bookCaption" placeholder="Enter book caption or description..." rows="4"></textarea></div>
                         <div class="form-group full-width">
                             <label>🖼️ Book Cover Image (Auto-compressed)</label>
-                            <div class="image-upload-area" id="imageUploadArea"><div class="upload-icon">📸</div><div class="upload-text">Click or drag & drop to upload image</div><div class="upload-hint">JPG, PNG or WebP (max 5MB, auto-compressed to ~300KB)</div><input type="file" id="imageInput" accept="image/*" style="display:none;"></div>
+                            <div class="image-upload-area" id="imageUploadArea"><div class="upload-icon">📸</div><div class="upload-text">Click or drag & drop to upload image</div><div class="upload-hint">JPG, PNG or WebP (max 5MB, auto-compressed)</div><input type="file" id="imageInput" accept="image/*" style="display:none;"></div>
                             <div class="image-preview" id="imagePreview"></div>
-                            <div class="progress-bar" id="uploadProgress"><div class="progress-bar-fill" id="progressFill"></div></div>
+                            <div class="progress-bar" id="imageProgress"><div class="progress-bar-fill" id="imageProgressFill"></div></div>
                         </div>
                         <div class="form-group full-width">
-                            <label>📄 PDF File (Optional - Base64)</label>
-                            <div class="image-upload-area" id="pdfUploadArea"><div class="upload-icon">📄</div><div class="upload-text">Click or drag & drop to upload PDF</div><div class="upload-hint">PDF files only (max 5MB, stored as Base64)</div><input type="file" id="pdfInput" accept=".pdf" style="display:none;"></div>
+                            <label>📄 PDF File (Uploaded to Storage)</label>
+                            <div class="image-upload-area" id="pdfUploadArea"><div class="upload-icon">📄</div><div class="upload-text">Click or drag & drop to upload PDF</div><div class="upload-hint">PDF files (max 20MB, uploaded to Firebase Storage)</div><input type="file" id="pdfInput" accept=".pdf" style="display:none;"></div>
                             <div class="image-preview" id="pdfPreview"></div>
-                            <div class="progress-bar" id="pdfUploadProgress"><div class="progress-bar-fill" id="pdfProgressFill"></div></div>
+                            <div class="progress-bar" id="pdfProgress"><div class="progress-bar-fill" id="pdfProgressFill"></div></div>
                         </div>
                         <div class="form-group full-width">
                             <div class="btn-group">
@@ -382,7 +383,7 @@
             },
             admin: { email: 'admin@storyforest.com', password: 'admin123' },
             maxImageSize: 5 * 1024 * 1024,
-            maxPDFSize: 5 * 1024 * 1024
+            maxPDFSize: 20 * 1024 * 1024
         };
 
         class Utils {
@@ -394,7 +395,8 @@
 
         class AppState {
             constructor() {
-                this.allBooks = []; this.deleteTargetId = null; this.selectedImageBase64 = null; this.selectedPDFBase64 = null; this.selectedPDFName = null; this.isAuthenticated = false;
+                this.allBooks = []; this.deleteTargetId = null; this.deleteTargetImageUrl = null; this.deleteTargetPdfUrl = null;
+                this.selectedImageFile = null; this.selectedPDFFile = null; this.isAuthenticated = false;
                 this.categories = ['Moral','Fiction','Non Fiction','Science Fiction','Mystery','Comics','Fantasy','Fairy Tale','Biography','Ghost Story','Others'];
                 this.categoryEmojis = { 'Moral':'🌟','Fiction':'📖','Non Fiction':'📚','Science Fiction':'🚀','Mystery':'🔍','Comics':'💭','Fantasy':'🧙','Fairy Tale':'🧚','Biography':'👤','Ghost Story':'👻','Others':'📦' };
             }
@@ -404,19 +406,100 @@
             constructor() {
                 if (!firebase.apps.length) firebase.initializeApp(CONFIG.firebase);
                 this.db = firebase.firestore();
+                this.storage = firebase.storage();
                 this.db.enablePersistence().catch(() => {});
             }
-            async addBook(data) { return (await this.db.collection('kids_books').add({ ...data, createdAt: firebase.firestore.FieldValue.serverTimestamp() })).id; }
-            loadBooksRealtime(cb) { return this.db.collection('kids_books').orderBy('createdAt','desc').onSnapshot(s => { const b = []; s.forEach(d => { const x = d.data(); b.push({ id: d.id, title: x.title||'', author: x.author||'', category: x.category||'', isbn: x.isbn||'', bookLink: x.bookLink||'', caption: x.caption||'', imageUrl: x.imageUrl||'', pdfUrl: x.pdfUrl||'', pdfName: x.pdfName||'', avgRating: x.avgRating||0 }); }); cb(b); }, e => { cb([]); }); }
-            async deleteBook(id) { const rs = await this.db.collection('kids_books').doc(id).collection('reviews').get(); const batch = this.db.batch(); rs.forEach(d => batch.delete(d.ref)); await batch.commit(); await this.db.collection('kids_books').doc(id).delete(); }
-            async countReviews() { let t = 0; for (const b of appState.allBooks) { t += (await this.db.collection('kids_books').doc(b.id).collection('reviews').get()).size; } return t; }
+            
+            // ✅ رفع ملف إلى Firebase Storage
+            uploadToStorage(file, path, progressCallback) {
+                const storageRef = this.storage.ref(path);
+                const uploadTask = storageRef.put(file);
+                
+                return new Promise((resolve, reject) => {
+                    uploadTask.on('state_changed',
+                        (snapshot) => {
+                            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                            if (progressCallback) progressCallback(progress);
+                        },
+                        (error) => { reject(error); },
+                        async () => {
+                            const downloadURL = await uploadTask.snapshot.ref.getDownloadURL();
+                            resolve(downloadURL);
+                        }
+                    );
+                });
+            }
+            
+            // ✅ حذف ملف من Firebase Storage
+            async deleteFromStorage(url) {
+                if (!url) return;
+                try {
+                    // نحاول الحذف فقط إذا كان الرابط من Firebase Storage
+                    if (url.includes('firebasestorage.googleapis.com')) {
+                        const storageRef = this.storage.refFromURL(url);
+                        await storageRef.delete();
+                    }
+                } catch (e) {
+                    console.warn('Could not delete file:', e.message);
+                }
+            }
+            
+            async addBook(data) {
+                return (await this.db.collection('kids_books').add({
+                    ...data,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                })).id;
+            }
+            
+            loadBooksRealtime(cb) {
+                return this.db.collection('kids_books').orderBy('createdAt','desc').onSnapshot(s => {
+                    const b = [];
+                    s.forEach(d => {
+                        const x = d.data();
+                        b.push({
+                            id: d.id, title: x.title||'', author: x.author||'', category: x.category||'',
+                            isbn: x.isbn||'', bookLink: x.bookLink||'', caption: x.caption||'',
+                            imageUrl: x.imageUrl||'', pdfUrl: x.pdfUrl||'', pdfName: x.pdfName||'',
+                            avgRating: x.avgRating||0
+                        });
+                    });
+                    cb(b);
+                }, e => { cb([]); });
+            }
+            
+            async deleteBook(id, imageUrl, pdfUrl) {
+                // حذف الملفات من Storage
+                await this.deleteFromStorage(imageUrl);
+                await this.deleteFromStorage(pdfUrl);
+                
+                // حذف المراجعات
+                const rs = await this.db.collection('kids_books').doc(id).collection('reviews').get();
+                const batch = this.db.batch();
+                rs.forEach(d => batch.delete(d.ref));
+                await batch.commit();
+                
+                // حذف الكتاب
+                await this.db.collection('kids_books').doc(id).delete();
+            }
+            
+            async countReviews() {
+                let t = 0;
+                for (const b of appState.allBooks) {
+                    t += (await this.db.collection('kids_books').doc(b.id).collection('reviews').get()).size;
+                }
+                return t;
+            }
         }
 
         class AdminUI {
             constructor() {
-                this.ls = document.getElementById('loginScreen'); this.db = document.getElementById('dashboard'); this.sb = document.getElementById('sidebar'); this.so = document.getElementById('sidebarOverlay'); this.tbm = document.getElementById('topBarMobile'); this.sbox = document.getElementById('searchBox');
-                this.setup(); this.initTheme(); if (sessionStorage.getItem('adminAuth') === 'true') { appState.isAuthenticated = true; this.showDashboard(); }
+                this.ls = document.getElementById('loginScreen'); this.db = document.getElementById('dashboard');
+                this.sb = document.getElementById('sidebar'); this.so = document.getElementById('sidebarOverlay');
+                this.tbm = document.getElementById('topBarMobile'); this.sbox = document.getElementById('searchBox');
+                this.setup(); this.initTheme();
+                if (sessionStorage.getItem('adminAuth') === 'true') { appState.isAuthenticated = true; this.showDashboard(); }
             }
+            
             setup() {
                 document.getElementById('loginBtn').addEventListener('click', () => this.login());
                 document.getElementById('loginPassword').addEventListener('keypress', e => { if (e.key === 'Enter') this.login(); });
@@ -435,23 +518,42 @@
                 this.setupImage(); this.setupPDF();
                 window.addEventListener('resize', () => { if (window.innerWidth > 1024) this.closeSidebar(); });
             }
+            
             login() {
                 const e = document.getElementById('loginEmail').value.trim(), p = document.getElementById('loginPassword').value.trim();
                 if (!e || !p) { document.getElementById('loginError').classList.add('show'); return; }
                 const b = document.getElementById('loginBtn'); b.disabled = true; document.getElementById('loginBtnText').textContent = '⏳...';
                 setTimeout(() => {
-                    if (e === CONFIG.admin.email && p === CONFIG.admin.password) { appState.isAuthenticated = true; sessionStorage.setItem('adminAuth','true'); document.getElementById('loginError').classList.remove('show'); this.showDashboard(); Utils.showNotification('Welcome! 🎉'); }
-                    else { document.getElementById('loginError').classList.add('show'); b.disabled = false; document.getElementById('loginBtnText').textContent = '🔐 Sign In'; }
+                    if (e === CONFIG.admin.email && p === CONFIG.admin.password) {
+                        appState.isAuthenticated = true; sessionStorage.setItem('adminAuth','true');
+                        document.getElementById('loginError').classList.remove('show'); this.showDashboard(); Utils.showNotification('Welcome! 🎉');
+                    } else {
+                        document.getElementById('loginError').classList.add('show'); b.disabled = false;
+                        document.getElementById('loginBtnText').textContent = '🔐 Sign In';
+                    }
                 }, 500);
             }
+            
             logout() { sessionStorage.removeItem('adminAuth'); appState.isAuthenticated = false; this.db.style.display = 'none'; this.tbm.style.display = 'none'; this.ls.classList.remove('hidden'); document.getElementById('loginBtn').disabled = false; document.getElementById('loginBtnText').textContent = '🔐 Sign In'; }
             showDashboard() { this.ls.classList.add('hidden'); this.db.style.display = 'flex'; this.tbm.style.display = 'block'; this.initDash(); }
-            nav(p) { document.querySelectorAll('.sidebar-menu a[data-page]').forEach(l => l.classList.toggle('active', l.dataset.page === p)); document.querySelectorAll('.page-content').forEach(c => c.style.display = 'none'); const t = document.getElementById('page-' + p); if (t) t.style.display = 'block'; document.getElementById('pageTitle').textContent = p === 'add-book' ? 'Add New Book' : p === 'manage-books' ? 'Manage Books' : 'Categories'; this.sbox.style.display = p === 'manage-books' ? 'flex' : 'none'; }
+            nav(p) {
+                document.querySelectorAll('.sidebar-menu a[data-page]').forEach(l => l.classList.toggle('active', l.dataset.page === p));
+                document.querySelectorAll('.page-content').forEach(c => c.style.display = 'none');
+                const t = document.getElementById('page-' + p); if (t) t.style.display = 'block';
+                document.getElementById('pageTitle').textContent = p === 'add-book' ? 'Add New Book' : p === 'manage-books' ? 'Manage Books' : 'Categories';
+                this.sbox.style.display = p === 'manage-books' ? 'flex' : 'none';
+            }
             toggleSidebar() { this.sb.classList.toggle('open'); this.so.classList.toggle('active'); }
             closeSidebar() { this.sb.classList.remove('open'); this.so.classList.remove('active'); }
-            toggleTheme() { const d = document.body.classList.contains('dark-mode'); if (d) { document.body.classList.remove('dark-mode'); localStorage.setItem('adminTheme','light'); } else { document.body.classList.add('dark-mode'); localStorage.setItem('adminTheme','dark'); } document.getElementById('themeToggleMobile').textContent = document.body.classList.contains('dark-mode') ? '🌙' : '☀️'; }
+            toggleTheme() {
+                const d = document.body.classList.contains('dark-mode');
+                if (d) { document.body.classList.remove('dark-mode'); localStorage.setItem('adminTheme','light'); }
+                else { document.body.classList.add('dark-mode'); localStorage.setItem('adminTheme','dark'); }
+                document.getElementById('themeToggleMobile').textContent = document.body.classList.contains('dark-mode') ? '🌙' : '☀️';
+            }
             initTheme() { if (localStorage.getItem('adminTheme') === 'light') document.body.classList.remove('dark-mode'); else document.body.classList.add('dark-mode'); }
 
+            // ============ IMAGE UPLOAD WITH COMPRESSION ============
             setupImage() {
                 const a = document.getElementById('imageUploadArea'), i = document.getElementById('imageInput');
                 a.addEventListener('click', () => i.click());
@@ -465,42 +567,46 @@
                 if (!file.type.match('image.*')) return Utils.showNotification('Please select an image', 'error');
                 if (file.size > CONFIG.maxImageSize) return Utils.showNotification(`Image too large! Max ${Utils.formatSize(CONFIG.maxImageSize)}`, 'error');
                 
+                appState.selectedImageFile = file;
+                
+                // ضغط الصورة وعرض معاينة
                 const reader = new FileReader();
                 reader.onload = (e) => {
                     const img = new Image();
                     img.src = e.target.result;
                     img.onload = () => {
-                        // ضغط الصورة تلقائياً
                         const canvas = document.createElement('canvas');
-                        const maxWidth = 800;
-                        const maxHeight = 1000;
-                        let width = img.width;
-                        let height = img.height;
+                        const maxWidth = 800, maxHeight = 1000;
+                        let width = img.width, height = img.height;
                         
                         if (width > maxWidth) { height = (maxWidth / width) * height; width = maxWidth; }
                         if (height > maxHeight) { width = (maxHeight / height) * width; height = maxHeight; }
                         
-                        canvas.width = width;
-                        canvas.height = height;
+                        canvas.width = width; canvas.height = height;
                         const ctx = canvas.getContext('2d');
                         ctx.drawImage(img, 0, 0, width, height);
                         
-                        appState.selectedImageBase64 = canvas.toDataURL('image/jpeg', 0.7);
+                        const previewBase64 = canvas.toDataURL('image/jpeg', 0.7);
                         
                         document.getElementById('imagePreview').innerHTML = `
                             <div class="image-preview-item">
-                                <img src="${appState.selectedImageBase64}" alt="Preview">
+                                <img src="${previewBase64}" alt="Preview">
                                 <span class="remove-image" onclick="window.remImage()">✕</span>
                             </div>`;
                         
-                        Utils.showNotification(`Image compressed to ${Utils.formatSize(appState.selectedImageBase64.length)}`);
+                        Utils.showNotification(`Image ready: ${file.name} (${Utils.formatSize(file.size)})`);
                     };
                 };
                 reader.readAsDataURL(file);
             }
             
-            remImage() { appState.selectedImageBase64 = null; document.getElementById('imagePreview').innerHTML = ''; document.getElementById('imageInput').value = ''; }
+            remImage() {
+                appState.selectedImageFile = null;
+                document.getElementById('imagePreview').innerHTML = '';
+                document.getElementById('imageInput').value = '';
+            }
 
+            // ============ PDF UPLOAD ============
             setupPDF() {
                 const a = document.getElementById('pdfUploadArea'), i = document.getElementById('pdfInput');
                 a.addEventListener('click', () => i.click());
@@ -509,46 +615,166 @@
                 a.addEventListener('drop', e => { e.preventDefault(); a.classList.remove('dragover'); const f = e.dataTransfer.files[0]; if (f?.type === 'application/pdf') this.handlePDF(f); });
                 i.addEventListener('change', e => { if (e.target.files[0]) this.handlePDF(e.target.files[0]); });
             }
-            handlePDF(f) {
-                if (f.type !== 'application/pdf') return Utils.showNotification('Please select a PDF','error');
-                if (f.size > CONFIG.maxPDFSize) return Utils.showNotification(`PDF too large! Max ${Utils.formatSize(CONFIG.maxPDFSize)}`,'error');
-                const r = new FileReader();
-                r.onload = e => { appState.selectedPDFBase64 = e.target.result; appState.selectedPDFName = f.name; document.getElementById('pdfPreview').innerHTML = `<div class="pdf-preview-item"><span class="pdf-icon">📄</span><span class="pdf-name">${Utils.escapeHTML(f.name)}</span><span style="font-size:10px;color:var(--text-secondary);">${Utils.formatSize(appState.selectedPDFBase64.length)}</span><span class="remove-image" onclick="window.remPDF()">✕</span></div>`; Utils.showNotification(`PDF ready (${Utils.formatSize(appState.selectedPDFBase64.length)})`); };
-                r.readAsDataURL(f);
+            
+            handlePDF(file) {
+                if (file.type !== 'application/pdf') return Utils.showNotification('Please select a PDF', 'error');
+                if (file.size > CONFIG.maxPDFSize) return Utils.showNotification(`PDF too large! Max ${Utils.formatSize(CONFIG.maxPDFSize)}`, 'error');
+                
+                appState.selectedPDFFile = file;
+                
+                document.getElementById('pdfPreview').innerHTML = `
+                    <div class="pdf-preview-item">
+                        <span class="pdf-icon">📄</span>
+                        <span class="pdf-name">${Utils.escapeHTML(file.name)}</span>
+                        <span style="font-size:10px;color:var(--text-secondary);">${Utils.formatSize(file.size)}</span>
+                        <span class="remove-image" onclick="window.remPDF()">✕</span>
+                    </div>`;
+                
+                Utils.showNotification(`PDF ready: ${file.name} (${Utils.formatSize(file.size)})`);
             }
-            remPDF() { appState.selectedPDFBase64 = null; appState.selectedPDFName = null; document.getElementById('pdfPreview').innerHTML = ''; document.getElementById('pdfInput').value = ''; }
+            
+            remPDF() {
+                appState.selectedPDFFile = null;
+                document.getElementById('pdfPreview').innerHTML = '';
+                document.getElementById('pdfInput').value = '';
+            }
 
+            // ============ ADD BOOK ============
             async addBook() {
-                const t = document.getElementById('bookTitle').value.trim(), a = document.getElementById('bookAuthor').value.trim(), c = document.getElementById('bookCategory').value;
+                const t = document.getElementById('bookTitle').value.trim();
+                const a = document.getElementById('bookAuthor').value.trim();
+                const c = document.getElementById('bookCategory').value;
+                
                 if (!t || !a || !c) return Utils.showNotification('Fill required fields','error');
-                const btn = document.getElementById('submitBookBtn'); btn.disabled = true; btn.innerHTML = '⏳ Adding...';
+                
+                const btn = document.getElementById('submitBookBtn');
+                btn.disabled = true;
+                btn.innerHTML = '⏳ Uploading...';
+                
                 try {
-                    await databaseService.addBook({ 
-                        title: t, author: a, category: c, 
-                        isbn: document.getElementById('bookISBN').value.trim(), 
-                        bookLink: document.getElementById('bookLink').value.trim(), 
-                        caption: document.getElementById('bookCaption').value.trim(), 
-                        imageUrl: appState.selectedImageBase64 || '', 
-                        pdfUrl: appState.selectedPDFBase64 || '', 
-                        pdfName: appState.selectedPDFName || '', 
-                        avgRating: 0 
-                    });
-                    Utils.showNotification('Book added! 🎉'); this.clearForm(); await this.updateStats();
-                } catch (e) { Utils.showNotification('Error: ' + e.message, 'error'); }
-                finally { btn.disabled = false; btn.innerHTML = '📚 Add Book to Library'; }
+                    const bookData = {
+                        title: t, author: a, category: c,
+                        isbn: document.getElementById('bookISBN').value.trim(),
+                        bookLink: document.getElementById('bookLink').value.trim(),
+                        caption: document.getElementById('bookCaption').value.trim(),
+                        imageUrl: '', pdfUrl: '', pdfName: '',
+                        avgRating: 0
+                    };
+                    
+                    // ✅ رفع الصورة - إذا كانت صغيرة نستخدم Base64، إذا كبيرة نرفعها إلى Storage
+                    if (appState.selectedImageFile) {
+                        // ضغط الصورة أولاً
+                        const compressedBase64 = await this.compressImage(appState.selectedImageFile);
+                        
+                        // إذا كانت الصورة المضغوطة أقل من 800KB، نخزنها Base64
+                        if (compressedBase64.length < 800000) {
+                            bookData.imageUrl = compressedBase64;
+                            console.log('✅ Image stored as Base64:', Utils.formatSize(compressedBase64.length));
+                        } else {
+                            // وإلا نرفعها إلى Storage
+                            const blob = this.base64ToBlob(compressedBase64);
+                            const path = `books/images/${Date.now()}.jpg`;
+                            bookData.imageUrl = await databaseService.uploadToStorage(blob, path, (progress) => {
+                                document.getElementById('imageProgress').style.display = 'block';
+                                document.getElementById('imageProgressFill').style.width = progress + '%';
+                            });
+                            console.log('✅ Image uploaded to Storage:', bookData.imageUrl);
+                        }
+                    }
+                    
+                    // ✅ رفع PDF إلى Storage دائماً
+                    if (appState.selectedPDFFile) {
+                        const path = `books/pdfs/${Date.now()}_${appState.selectedPDFFile.name}`;
+                        bookData.pdfUrl = await databaseService.uploadToStorage(appState.selectedPDFFile, path, (progress) => {
+                            document.getElementById('pdfProgress').style.display = 'block';
+                            document.getElementById('pdfProgressFill').style.width = progress + '%';
+                        });
+                        bookData.pdfName = appState.selectedPDFFile.name;
+                        console.log('✅ PDF uploaded to Storage:', bookData.pdfUrl);
+                    }
+                    
+                    await databaseService.addBook(bookData);
+                    Utils.showNotification('Book added! 🎉');
+                    this.clearForm();
+                    await this.updateStats();
+                    
+                } catch (e) {
+                    Utils.showNotification('Error: ' + e.message, 'error');
+                    console.error(e);
+                } finally {
+                    btn.disabled = false;
+                    btn.innerHTML = '📚 Add Book to Library';
+                    document.getElementById('imageProgress').style.display = 'none';
+                    document.getElementById('pdfProgress').style.display = 'none';
+                }
             }
-            clearForm() { document.getElementById('addBookForm').reset(); this.remImage(); this.remPDF(); document.getElementById('bookTitle').focus(); }
+            
+            // ✅ ضغط الصورة وإرجاع Base64
+            compressImage(file) {
+                return new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        const img = new Image();
+                        img.src = e.target.result;
+                        img.onload = () => {
+                            const canvas = document.createElement('canvas');
+                            const maxWidth = 800, maxHeight = 1000;
+                            let width = img.width, height = img.height;
+                            
+                            if (width > maxWidth) { height = (maxWidth / width) * height; width = maxWidth; }
+                            if (height > maxHeight) { width = (maxHeight / height) * width; height = maxHeight; }
+                            
+                            canvas.width = width; canvas.height = height;
+                            const ctx = canvas.getContext('2d');
+                            ctx.drawImage(img, 0, 0, width, height);
+                            
+                            resolve(canvas.toDataURL('image/jpeg', 0.7));
+                        };
+                    };
+                    reader.readAsDataURL(file);
+                });
+            }
+            
+            // ✅ تحويل Base64 إلى Blob
+            base64ToBlob(base64, mimeType = 'image/jpeg') {
+                const byteString = atob(base64.split(',')[1]);
+                const ab = new ArrayBuffer(byteString.length);
+                const ia = new Uint8Array(ab);
+                for (let i = 0; i < byteString.length; i++) { ia[i] = byteString.charCodeAt(i); }
+                return new Blob([ab], { type: mimeType });
+            }
+            
+            clearForm() {
+                document.getElementById('addBookForm').reset();
+                this.remImage(); this.remPDF();
+                document.getElementById('bookTitle').focus();
+            }
 
-            confirmDelete(id, title) { appState.deleteTargetId = id; document.getElementById('deleteBookTitle').textContent = title; document.getElementById('deleteModal').classList.add('active'); }
-            closeDelete() { document.getElementById('deleteModal').classList.remove('active'); appState.deleteTargetId = null; }
+            // ============ DELETE ============
+            confirmDelete(id, title, imageUrl, pdfUrl) {
+                appState.deleteTargetId = id;
+                appState.deleteTargetImageUrl = imageUrl;
+                appState.deleteTargetPdfUrl = pdfUrl;
+                document.getElementById('deleteBookTitle').textContent = title;
+                document.getElementById('deleteModal').classList.add('active');
+            }
+            closeDelete() {
+                document.getElementById('deleteModal').classList.remove('active');
+                appState.deleteTargetId = null;
+                appState.deleteTargetImageUrl = null;
+                appState.deleteTargetPdfUrl = null;
+            }
             async deleteBook() {
                 if (!appState.deleteTargetId) return;
                 const btn = document.getElementById('confirmDeleteBtn'); btn.disabled = true; btn.innerHTML = '⏳...';
-                try { await databaseService.deleteBook(appState.deleteTargetId); Utils.showNotification('Book deleted!'); this.closeDelete(); await this.updateStats(); }
-                catch (e) { Utils.showNotification('Error: ' + e.message, 'error'); }
+                try {
+                    await databaseService.deleteBook(appState.deleteTargetId, appState.deleteTargetImageUrl, appState.deleteTargetPdfUrl);
+                    Utils.showNotification('Book deleted!'); this.closeDelete(); await this.updateStats();
+                } catch (e) { Utils.showNotification('Error: ' + e.message, 'error'); }
                 finally { btn.disabled = false; btn.innerHTML = '🗑️ Delete Permanently'; }
             }
 
+            // ============ TABLE ============
             renderTable() {
                 const q = document.getElementById('dashboardSearch').value.trim().toLowerCase();
                 let books = appState.allBooks;
@@ -558,6 +784,9 @@
                 if (!books.length) { tbody.innerHTML = `<tr><td colspan="9"><div class="empty-state"><div class="empty-icon">📚</div><h3>${q?'No Results':'No Books'}</h3></div></td></tr>`; return; }
                 tbody.innerHTML = books.map(b => {
                     const r = (b.avgRating||0).toFixed(1), s = '★'.repeat(Math.round(b.avgRating||0))+'☆'.repeat(5-Math.round(b.avgRating||0));
+                    const titleEscaped = Utils.escapeHTML(b.title).replace(/'/g,"\\'");
+                    const imgUrlEscaped = (b.imageUrl||'').replace(/'/g,"\\'");
+                    const pdfUrlEscaped = (b.pdfUrl||'').replace(/'/g,"\\'");
                     return `<tr>
                         <td>${b.imageUrl?`<img src="${b.imageUrl}" class="book-thumb" onerror="this.style.display='none';this.nextElementSibling.style.display='inline';"><span style="display:none;font-size:30px;">📖</span>`:'<span style="font-size:30px;">📖</span>'}</td>
                         <td><div class="book-title-cell" title="${Utils.escapeHTML(b.title)}">${Utils.escapeHTML(b.title)}</div></td>
@@ -566,8 +795,10 @@
                         <td><span class="rating-stars">${s}</span> ${r}</td>
                         <td>${b.isbn?`<code style="background:var(--input-bg);padding:4px 8px;border-radius:6px;font-size:12px;">${Utils.escapeHTML(b.isbn)}</code>`:'-'}</td>
                         <td>${b.bookLink?`<a href="${b.bookLink}" target="_blank" class="badge badge-info">🛒 Link</a>`:'-'}</td>
-                        <td>${b.pdfUrl?'<span class="badge badge-warning">📄 PDF</span>':'-'}</td>
-                        <td><div class="actions-cell">${b.pdfUrl?`<a href="${b.pdfUrl}" target="_blank" class="btn btn-sm btn-warning">📄</a>`:''}<button class="btn btn-sm btn-danger" onclick="window.confirmDelete('${b.id}','${Utils.escapeHTML(b.title).replace(/'/g,"\\'")}')">🗑️</button></div></td>
+                        <td>${b.pdfUrl?`<a href="${b.pdfUrl}" target="_blank" class="badge badge-warning">📄 PDF</a>`:'-'}</td>
+                        <td><div class="actions-cell">
+                            <button class="btn btn-sm btn-danger" onclick="window.confirmDelete('${b.id}','${titleEscaped}','${imgUrlEscaped}','${pdfUrlEscaped}')">🗑️</button>
+                        </div></td>
                     </tr>`;
                 }).join('');
             }
@@ -602,8 +833,8 @@
         const adminUI = new AdminUI();
         window.remImage = () => adminUI.remImage();
         window.remPDF = () => adminUI.remPDF();
-        window.confirmDelete = (id, title) => adminUI.confirmDelete(id, title);
-        console.log('🚀 Admin Dashboard Ready - Base64 Storage with Auto-Compression');
+        window.confirmDelete = (id, title, imageUrl, pdfUrl) => adminUI.confirmDelete(id, title, imageUrl, pdfUrl);
+        console.log('🚀 Admin Dashboard Ready - Firebase Storage for large files');
     </script>
 </body>
 </html>
