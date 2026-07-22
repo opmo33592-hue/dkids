@@ -16,6 +16,7 @@
     
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
     
     <style>
         :root {
@@ -61,7 +62,6 @@
         .login-btn:disabled { opacity: 0.5; cursor: not-allowed; }
         .login-error { background: rgba(255,82,82,0.1); border: 1px solid var(--danger); color: var(--danger); padding: 14px; border-radius: 14px; margin-bottom: 20px; font-size: 14px; font-weight: 600; display: none; }
         .login-error.show { display: block; }
-        .login-hint { margin-top: 20px; padding: 12px; background: var(--badge-bg); border-radius: 12px; font-size: 12px; color: var(--text-secondary); font-weight: 600; }
         .dashboard { display: flex; min-height: 100vh; position: relative; }
         .top-bar-mobile { display: none; position: sticky; top: 0; z-index: 100; background: var(--nav-bg); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); box-shadow: 0 2px 20px rgba(0,0,0,0.08); border-bottom: 1px solid var(--border); padding: 16px 20px; }
         .top-bar-mobile-content { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -123,11 +123,13 @@
         .image-preview { margin-top: 20px; display: flex; gap: 16px; flex-wrap: wrap; }
         .image-preview-item { position: relative; width: 140px; height: 180px; border-radius: 16px; overflow: hidden; border: 2px solid var(--border); box-shadow: var(--shadow-card); }
         .image-preview-item img { width: 100%; height: 100%; object-fit: cover; }
-        .pdf-preview-item { position: relative; width: 140px; height: 180px; border-radius: 16px; overflow: hidden; border: 2px solid var(--border); box-shadow: var(--shadow-card); background: var(--input-bg); display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 8px; }
+        .pdf-preview-item { position: relative; width: 180px; height: 120px; border-radius: 16px; overflow: hidden; border: 2px solid var(--border); box-shadow: var(--shadow-card); background: var(--input-bg); display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 8px; }
         .pdf-preview-item .pdf-icon { font-size: 48px; }
         .pdf-preview-item .pdf-name { font-size: 11px; color: var(--text-secondary); text-align: center; padding: 0 8px; word-break: break-all; }
         .remove-image { position: absolute; top: 8px; right: 8px; width: 32px; height: 32px; background: var(--danger); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 16px; font-weight: 700; transition: all 0.3s ease; box-shadow: 0 4px 12px rgba(255,82,82,0.4); border: 2px solid white; z-index: 5; }
         .remove-image:hover { transform: scale(1.2) rotate(90deg); }
+        .progress-bar { width: 100%; height: 8px; background: var(--border); border-radius: 4px; margin-top: 16px; overflow: hidden; display: none; }
+        .progress-bar-fill { height: 100%; background: linear-gradient(90deg, var(--coral), var(--coral-dark)); border-radius: 4px; transition: width 0.3s ease; width: 0%; }
         .btn { padding: 14px 28px; border-radius: 14px; font-weight: 800; font-size: 15px; display: inline-flex; align-items: center; gap: 8px; letter-spacing: 0.3px; transition: all 0.3s ease; white-space: nowrap; }
         .btn-primary { background: linear-gradient(135deg, var(--coral), var(--coral-dark)); color: white; box-shadow: 0 8px 30px rgba(255,107,107,0.35); }
         .btn-primary:hover { transform: translateY(-3px); box-shadow: 0 12px 40px rgba(255,107,107,0.5); }
@@ -250,13 +252,14 @@
                         <div class="form-group full-width"><label>📝 Caption / Description</label><textarea id="bookCaption" placeholder="Enter book caption or description..." rows="4"></textarea></div>
                         <div class="form-group full-width">
                             <label>🖼️ Book Cover Image (Auto-compressed)</label>
-                            <div class="image-upload-area" id="imageUploadArea"><div class="upload-icon">📸</div><div class="upload-text">Click or drag & drop to upload image</div><div class="upload-hint">JPG, PNG or WebP</div><input type="file" id="imageInput" accept="image/*" style="display:none;"></div>
+                            <div class="image-upload-area" id="imageUploadArea"><div class="upload-icon">📸</div><div class="upload-text">Click or drag & drop to upload image</div><div class="upload-hint">JPG, PNG or WebP - auto compressed</div><input type="file" id="imageInput" accept="image/*" style="display:none;"></div>
                             <div class="image-preview" id="imagePreview"></div>
                         </div>
                         <div class="form-group full-width">
-                            <label>📄 PDF File (Base64)</label>
-                            <div class="image-upload-area" id="pdfUploadArea"><div class="upload-icon">📄</div><div class="upload-text">Click or drag & drop to upload PDF</div><div class="upload-hint">PDF files only</div><input type="file" id="pdfInput" accept=".pdf" style="display:none;"></div>
+                            <label>📄 PDF File (Uploaded to Storage)</label>
+                            <div class="image-upload-area" id="pdfUploadArea"><div class="upload-icon">📄</div><div class="upload-text">Click or drag & drop to upload PDF</div><div class="upload-hint">PDF files - stored as download link</div><input type="file" id="pdfInput" accept=".pdf" style="display:none;"></div>
                             <div class="image-preview" id="pdfPreview"></div>
+                            <div class="progress-bar" id="pdfProgress"><div class="progress-bar-fill" id="pdfProgressFill"></div></div>
                         </div>
                         <div class="form-group full-width">
                             <div class="btn-group">
@@ -316,8 +319,8 @@
 
         class AppState {
             constructor() {
-                this.allBooks = []; this.deleteTargetId = null;
-                this.selectedImageBase64 = null; this.selectedPDFBase64 = null; this.selectedPDFName = null;
+                this.allBooks = []; this.deleteTargetId = null; this.deleteTargetPdfUrl = null; this.deleteTargetImageUrl = null;
+                this.selectedImageBase64 = null; this.selectedPDFFile = null; this.selectedPDFPreviewUrl = null;
                 this.isAuthenticated = false;
                 this.categories = ['Moral','Fiction','Non Fiction','Science Fiction','Mystery','Comics','Fantasy','Fairy Tale','Biography','Ghost Story','Others'];
                 this.categoryEmojis = { 'Moral':'🌟','Fiction':'📖','Non Fiction':'📚','Science Fiction':'🚀','Mystery':'🔍','Comics':'💭','Fantasy':'🧙','Fairy Tale':'🧚','Biography':'👤','Ghost Story':'👻','Others':'📦' };
@@ -328,11 +331,49 @@
             constructor() {
                 if (!firebase.apps.length) firebase.initializeApp(CONFIG.firebase);
                 this.db = firebase.firestore();
+                this.storage = firebase.storage();
                 this.db.enablePersistence().catch(() => {});
             }
+            
+            // رفع ملف إلى Firebase Storage
+            async uploadToStorage(file, path, onProgress) {
+                const storageRef = this.storage.ref(path);
+                const uploadTask = storageRef.put(file);
+                return new Promise((resolve, reject) => {
+                    uploadTask.on('state_changed',
+                        (snapshot) => {
+                            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                            if (onProgress) onProgress(progress);
+                        },
+                        (error) => reject(error),
+                        async () => {
+                            const url = await uploadTask.snapshot.ref.getDownloadURL();
+                            resolve(url);
+                        }
+                    );
+                });
+            }
+            
+            // حذف ملف من Storage
+            async deleteFromStorage(url) {
+                if (!url || !url.includes('firebasestorage.googleapis.com')) return;
+                try { await this.storage.refFromURL(url).delete(); } catch(e) {}
+            }
+            
             async addBook(data) { return (await this.db.collection('kids_books').add({ ...data, createdAt: firebase.firestore.FieldValue.serverTimestamp() })).id; }
+            
             loadBooksRealtime(cb) { return this.db.collection('kids_books').orderBy('createdAt','desc').onSnapshot(s => { const b = []; s.forEach(d => { const x = d.data(); b.push({ id: d.id, title: x.title||'', author: x.author||'', category: x.category||'', isbn: x.isbn||'', bookLink: x.bookLink||'', caption: x.caption||'', imageUrl: x.imageUrl||'', pdfUrl: x.pdfUrl||'', pdfName: x.pdfName||'', avgRating: x.avgRating||0 }); }); cb(b); }, e => { cb([]); }); }
-            async deleteBook(id) { const rs = await this.db.collection('kids_books').doc(id).collection('reviews').get(); const batch = this.db.batch(); rs.forEach(d => batch.delete(d.ref)); await batch.commit(); await this.db.collection('kids_books').doc(id).delete(); }
+            
+            async deleteBook(id, imageUrl, pdfUrl) {
+                await this.deleteFromStorage(imageUrl);
+                await this.deleteFromStorage(pdfUrl);
+                const rs = await this.db.collection('kids_books').doc(id).collection('reviews').get();
+                const batch = this.db.batch();
+                rs.forEach(d => batch.delete(d.ref));
+                await batch.commit();
+                await this.db.collection('kids_books').doc(id).delete();
+            }
+            
             async countReviews() { let t = 0; for (const b of appState.allBooks) { t += (await this.db.collection('kids_books').doc(b.id).collection('reviews').get()).size; } return t; }
         }
 
@@ -412,7 +453,7 @@
             }
             remImage() { appState.selectedImageBase64 = null; document.getElementById('imagePreview').innerHTML = ''; document.getElementById('imageInput').value = ''; }
 
-            // ============ PDF UPLOAD AS BASE64 ============
+            // ============ PDF UPLOAD TO STORAGE ============
             setupPDF() {
                 const a = document.getElementById('pdfUploadArea'), i = document.getElementById('pdfInput');
                 a.addEventListener('click', () => i.click());
@@ -424,60 +465,60 @@
             handlePDF(file) {
                 if (file.type !== 'application/pdf') return Utils.showNotification('Please select a PDF', 'error');
                 
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    const base64Data = e.target.result;
-                    const base64Size = base64Data.length;
-                    
-                    if (base64Size > 950000) {
-                        return Utils.showNotification(`PDF too large after conversion (${Utils.formatSize(base64Size)}). Please use a smaller PDF.`, 'error');
-                    }
-                    
-                    appState.selectedPDFBase64 = base64Data;
-                    appState.selectedPDFName = file.name;
-                    
-                    document.getElementById('pdfPreview').innerHTML = `
-                        <div class="pdf-preview-item">
-                            <span class="pdf-icon">📄</span>
-                            <span class="pdf-name">${Utils.escapeHTML(file.name)}</span>
-                            <span style="font-size:10px;color:var(--text-secondary);">${Utils.formatSize(base64Size)}</span>
-                            <span class="remove-image" onclick="window.remPDF()">✕</span>
-                        </div>`;
-                    
-                    Utils.showNotification(`PDF ready (${Utils.formatSize(base64Size)})`);
-                };
-                reader.readAsDataURL(file);
+                appState.selectedPDFFile = file;
+                
+                document.getElementById('pdfPreview').innerHTML = `
+                    <div class="pdf-preview-item">
+                        <span class="pdf-icon">📄</span>
+                        <span class="pdf-name">${Utils.escapeHTML(file.name)}</span>
+                        <span style="font-size:10px;color:var(--text-secondary);">${Utils.formatSize(file.size)}</span>
+                        <span class="remove-image" onclick="window.remPDF()">✕</span>
+                    </div>`;
+                
+                Utils.showNotification(`PDF ready for upload: ${file.name} (${Utils.formatSize(file.size)})`);
             }
-            remPDF() { appState.selectedPDFBase64 = null; appState.selectedPDFName = null; document.getElementById('pdfPreview').innerHTML = ''; document.getElementById('pdfInput').value = ''; }
+            remPDF() { appState.selectedPDFFile = null; document.getElementById('pdfPreview').innerHTML = ''; document.getElementById('pdfInput').value = ''; document.getElementById('pdfProgress').style.display = 'none'; }
 
             // ============ ADD BOOK ============
             async addBook() {
                 const t = document.getElementById('bookTitle').value.trim(), a = document.getElementById('bookAuthor').value.trim(), c = document.getElementById('bookCategory').value;
                 if (!t || !a || !c) return Utils.showNotification('Please fill all required fields', 'error');
-                const btn = document.getElementById('submitBookBtn'); btn.disabled = true; btn.innerHTML = '⏳ Adding...';
+                const btn = document.getElementById('submitBookBtn'); btn.disabled = true; btn.innerHTML = '⏳ Uploading...';
                 try {
-                    await databaseService.addBook({
+                    const bookData = {
                         title: t, author: a, category: c,
                         isbn: document.getElementById('bookISBN').value.trim(),
                         bookLink: document.getElementById('bookLink').value.trim(),
                         caption: document.getElementById('bookCaption').value.trim(),
                         imageUrl: appState.selectedImageBase64 || '',
-                        pdfUrl: appState.selectedPDFBase64 || '',
-                        pdfName: appState.selectedPDFName || '',
-                        avgRating: 0
-                    });
+                        pdfUrl: '', pdfName: '', avgRating: 0
+                    };
+                    
+                    // رفع PDF إلى Firebase Storage
+                    if (appState.selectedPDFFile) {
+                        const pdfPath = `pdfs/${Date.now()}_${appState.selectedPDFFile.name}`;
+                        bookData.pdfUrl = await databaseService.uploadToStorage(appState.selectedPDFFile, pdfPath, (progress) => {
+                            document.getElementById('pdfProgress').style.display = 'block';
+                            document.getElementById('pdfProgressFill').style.width = progress + '%';
+                        });
+                        bookData.pdfName = appState.selectedPDFFile.name;
+                    }
+                    
+                    await databaseService.addBook(bookData);
                     Utils.showNotification('Book added! 🎉'); this.clearForm(); await this.updateStats();
                 } catch (e) {
-                    if (e.message.includes('longer than')) { Utils.showNotification('File too large for database. Use a smaller file.', 'error'); }
-                    else { Utils.showNotification('Error: ' + e.message, 'error'); }
-                } finally { btn.disabled = false; btn.innerHTML = '📚 Add Book to Library'; }
+                    Utils.showNotification('Error: ' + e.message, 'error');
+                } finally {
+                    btn.disabled = false; btn.innerHTML = '📚 Add Book to Library';
+                    document.getElementById('pdfProgress').style.display = 'none';
+                }
             }
             clearForm() { document.getElementById('addBookForm').reset(); this.remImage(); this.remPDF(); document.getElementById('bookTitle').focus(); }
 
             // ============ DELETE ============
-            confirmDelete(id, title) { appState.deleteTargetId = id; document.getElementById('deleteBookTitle').textContent = title; document.getElementById('deleteModal').classList.add('active'); }
+            confirmDelete(id, title, imageUrl, pdfUrl) { appState.deleteTargetId = id; appState.deleteTargetImageUrl = imageUrl; appState.deleteTargetPdfUrl = pdfUrl; document.getElementById('deleteBookTitle').textContent = title; document.getElementById('deleteModal').classList.add('active'); }
             closeDelete() { document.getElementById('deleteModal').classList.remove('active'); appState.deleteTargetId = null; }
-            async deleteBook() { if (!appState.deleteTargetId) return; const btn = document.getElementById('confirmDeleteBtn'); btn.disabled = true; btn.innerHTML = '⏳...'; try { await databaseService.deleteBook(appState.deleteTargetId); Utils.showNotification('Book deleted!'); this.closeDelete(); await this.updateStats(); } catch (e) { Utils.showNotification('Error: ' + e.message, 'error'); } finally { btn.disabled = false; btn.innerHTML = '🗑️ Delete Permanently'; } }
+            async deleteBook() { if (!appState.deleteTargetId) return; const btn = document.getElementById('confirmDeleteBtn'); btn.disabled = true; btn.innerHTML = '⏳...'; try { await databaseService.deleteBook(appState.deleteTargetId, appState.deleteTargetImageUrl, appState.deleteTargetPdfUrl); Utils.showNotification('Book deleted!'); this.closeDelete(); await this.updateStats(); } catch (e) { Utils.showNotification('Error: ' + e.message, 'error'); } finally { btn.disabled = false; btn.innerHTML = '🗑️ Delete Permanently'; } }
 
             // ============ TABLE ============
             renderTable() {
@@ -489,6 +530,9 @@
                 if (!books.length) { tbody.innerHTML = `<tr><td colspan="9"><div class="empty-state"><div class="empty-icon">📚</div><h3>${q?'No Results':'No Books'}</h3></div></td></tr>`; return; }
                 tbody.innerHTML = books.map(b => {
                     const r = (b.avgRating||0).toFixed(1), s = '★'.repeat(Math.round(b.avgRating||0))+'☆'.repeat(5-Math.round(b.avgRating||0));
+                    const titleEsc = Utils.escapeHTML(b.title).replace(/'/g,"\\'");
+                    const imgEsc = (b.imageUrl||'').replace(/'/g,"\\'");
+                    const pdfEsc = (b.pdfUrl||'').replace(/'/g,"\\'");
                     return `<tr>
                         <td>${b.imageUrl?`<img src="${b.imageUrl}" class="book-thumb" onerror="this.style.display='none';this.nextElementSibling.style.display='inline';"><span style="display:none;font-size:30px;">📖</span>`:'<span style="font-size:30px;">📖</span>'}</td>
                         <td><div class="book-title-cell" title="${Utils.escapeHTML(b.title)}">${Utils.escapeHTML(b.title)}</div></td>
@@ -498,7 +542,7 @@
                         <td>${b.isbn?`<code style="background:var(--input-bg);padding:4px 8px;border-radius:6px;font-size:12px;">${Utils.escapeHTML(b.isbn)}</code>`:'-'}</td>
                         <td>${b.bookLink?`<a href="${b.bookLink}" target="_blank" class="badge badge-info">🛒 Link</a>`:'-'}</td>
                         <td>${b.pdfUrl?`<a href="${b.pdfUrl}" target="_blank" class="badge badge-warning">📄 PDF</a>`:'-'}</td>
-                        <td><div class="actions-cell"><button class="btn btn-sm btn-danger" onclick="window.confirmDelete('${b.id}','${Utils.escapeHTML(b.title).replace(/'/g,"\\'")}')">🗑️</button></div></td>
+                        <td><div class="actions-cell"><button class="btn btn-sm btn-danger" onclick="window.confirmDelete('${b.id}','${titleEsc}','${imgEsc}','${pdfEsc}')">🗑️</button></div></td>
                     </tr>`;
                 }).join('');
             }
@@ -533,8 +577,8 @@
         const adminUI = new AdminUI();
         window.remImage = () => adminUI.remImage();
         window.remPDF = () => adminUI.remPDF();
-        window.confirmDelete = (id, title) => adminUI.confirmDelete(id, title);
-        console.log('🚀 Admin Dashboard Ready - Base64 Storage');
+        window.confirmDelete = (id, title, imageUrl, pdfUrl) => adminUI.confirmDelete(id, title, imageUrl, pdfUrl);
+        console.log('🚀 Admin Dashboard Ready - Firebase Storage for PDFs');
     </script>
 </body>
 </html>
