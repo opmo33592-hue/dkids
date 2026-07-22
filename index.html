@@ -179,7 +179,7 @@
         .btn-group { display: flex; gap: 12px; flex-wrap: wrap; }
 
         .table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 16px; border: 1px solid var(--border); }
-        table { width: 100%; border-collapse: collapse; min-width: 700px; }
+        table { width: 100%; border-collapse: collapse; min-width: 800px; }
         table th, table td { padding: 16px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
         table th { font-weight: 800; font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-secondary); background: var(--input-bg); position: sticky; top: 0; z-index: 1; }
         table tbody tr:hover { background: rgba(255,107,107,0.03); }
@@ -189,6 +189,7 @@
         .badge { display: inline-block; padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 800; }
         .badge-success { background: rgba(76,175,80,0.15); color: #4CAF50; }
         .badge-warning { background: rgba(255,193,7,0.15); color: #FF9800; }
+        .badge-info { background: rgba(255,153,0,0.15); color: #FF9900; }
         .rating-stars { color: var(--sun); font-size: 16px; }
 
         .modal-overlay { position: fixed; inset: 0; background: var(--modal-overlay); backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 20px; opacity: 0; visibility: hidden; transition: all 0.3s ease; }
@@ -310,16 +311,17 @@
                         <div class="form-group"><label>✍️ Author *</label><input type="text" id="bookAuthor" placeholder="Enter author name" required></div>
                         <div class="form-group"><label>🏷️ Category *</label><select id="bookCategory" required><option value="">Select category</option></select></div>
                         <div class="form-group"><label>📖 ISBN</label><input type="text" id="bookISBN" placeholder="e.g., 978-3-16-148410-0"></div>
+                        <div class="form-group"><label>🔗 Book Link (Amazon URL)</label><input type="url" id="bookLink" placeholder="https://www.amazon.com/..."></div>
                         <div class="form-group full-width"><label>📝 Caption / Description</label><textarea id="bookCaption" placeholder="Enter book caption or description..." rows="4"></textarea></div>
                         <div class="form-group full-width">
-                            <label>🖼️ Book Cover Image (Base64)</label>
-                            <div class="image-upload-area" id="imageUploadArea"><div class="upload-icon">📸</div><div class="upload-text">Click or drag & drop to upload image</div><div class="upload-hint">JPG, PNG or WebP (max 1MB recommended for Base64)</div><input type="file" id="imageInput" accept="image/*" style="display:none;"></div>
+                            <label>🖼️ Book Cover Image (Auto-compressed)</label>
+                            <div class="image-upload-area" id="imageUploadArea"><div class="upload-icon">📸</div><div class="upload-text">Click or drag & drop to upload image</div><div class="upload-hint">JPG, PNG or WebP (max 5MB, auto-compressed to ~300KB)</div><input type="file" id="imageInput" accept="image/*" style="display:none;"></div>
                             <div class="image-preview" id="imagePreview"></div>
                             <div class="progress-bar" id="uploadProgress"><div class="progress-bar-fill" id="progressFill"></div></div>
                         </div>
                         <div class="form-group full-width">
                             <label>📄 PDF File (Optional - Base64)</label>
-                            <div class="image-upload-area" id="pdfUploadArea"><div class="upload-icon">📄</div><div class="upload-text">Click or drag & drop to upload PDF</div><div class="upload-hint">PDF files only (max 5MB recommended for Base64)</div><input type="file" id="pdfInput" accept=".pdf" style="display:none;"></div>
+                            <div class="image-upload-area" id="pdfUploadArea"><div class="upload-icon">📄</div><div class="upload-text">Click or drag & drop to upload PDF</div><div class="upload-hint">PDF files only (max 5MB, stored as Base64)</div><input type="file" id="pdfInput" accept=".pdf" style="display:none;"></div>
                             <div class="image-preview" id="pdfPreview"></div>
                             <div class="progress-bar" id="pdfUploadProgress"><div class="progress-bar-fill" id="pdfProgressFill"></div></div>
                         </div>
@@ -338,8 +340,8 @@
                     <div class="card-header"><h3 class="card-title">📋 All Books</h3><span class="card-badge" id="booksCount">0 books</span></div>
                     <div class="table-container">
                         <table>
-                            <thead><tr><th>Cover</th><th>Title</th><th>Author</th><th>Category</th><th>Rating</th><th>ISBN</th><th>PDF</th><th>Actions</th></tr></thead>
-                            <tbody id="booksTableBody"><tr><td colspan="8"><div class="loading-container"><div class="loading-spinner"></div><p style="margin-top:16px;color:var(--text-secondary);">Loading books...</p></div></td></tr></tbody>
+                            <thead><tr><th>Cover</th><th>Title</th><th>Author</th><th>Category</th><th>Rating</th><th>ISBN</th><th>Link</th><th>PDF</th><th>Actions</th></tr></thead>
+                            <tbody id="booksTableBody"><tr><td colspan="9"><div class="loading-container"><div class="loading-spinner"></div><p style="margin-top:16px;color:var(--text-secondary);">Loading books...</p></div></td></tr></tbody>
                         </table>
                     </div>
                 </div>
@@ -379,7 +381,7 @@
                 measurementId: "G-182PQM53WS"
             },
             admin: { email: 'admin@storyforest.com', password: 'admin123' },
-            maxImageSize: 1.5 * 1024 * 1024,
+            maxImageSize: 5 * 1024 * 1024,
             maxPDFSize: 5 * 1024 * 1024
         };
 
@@ -405,7 +407,7 @@
                 this.db.enablePersistence().catch(() => {});
             }
             async addBook(data) { return (await this.db.collection('kids_books').add({ ...data, createdAt: firebase.firestore.FieldValue.serverTimestamp() })).id; }
-            loadBooksRealtime(cb) { return this.db.collection('kids_books').orderBy('createdAt','desc').onSnapshot(s => { const b = []; s.forEach(d => { const x = d.data(); b.push({ id: d.id, title: x.title||'', author: x.author||'', category: x.category||'', isbn: x.isbn||'', caption: x.caption||'', imageUrl: x.imageUrl||'', pdfUrl: x.pdfUrl||'', pdfName: x.pdfName||'', avgRating: x.avgRating||0 }); }); cb(b); }, e => { cb([]); }); }
+            loadBooksRealtime(cb) { return this.db.collection('kids_books').orderBy('createdAt','desc').onSnapshot(s => { const b = []; s.forEach(d => { const x = d.data(); b.push({ id: d.id, title: x.title||'', author: x.author||'', category: x.category||'', isbn: x.isbn||'', bookLink: x.bookLink||'', caption: x.caption||'', imageUrl: x.imageUrl||'', pdfUrl: x.pdfUrl||'', pdfName: x.pdfName||'', avgRating: x.avgRating||0 }); }); cb(b); }, e => { cb([]); }); }
             async deleteBook(id) { const rs = await this.db.collection('kids_books').doc(id).collection('reviews').get(); const batch = this.db.batch(); rs.forEach(d => batch.delete(d.ref)); await batch.commit(); await this.db.collection('kids_books').doc(id).delete(); }
             async countReviews() { let t = 0; for (const b of appState.allBooks) { t += (await this.db.collection('kids_books').doc(b.id).collection('reviews').get()).size; } return t; }
         }
@@ -458,13 +460,45 @@
                 a.addEventListener('drop', e => { e.preventDefault(); a.classList.remove('dragover'); const f = e.dataTransfer.files[0]; if (f?.type.match('image.*')) this.handleImage(f); });
                 i.addEventListener('change', e => { if (e.target.files[0]) this.handleImage(e.target.files[0]); });
             }
-            handleImage(f) {
-                if (!f.type.match('image.*')) return Utils.showNotification('Please select an image','error');
-                if (f.size > CONFIG.maxImageSize) return Utils.showNotification('Image too large! Max 1.5MB','error');
-                const r = new FileReader();
-                r.onload = e => { appState.selectedImageBase64 = e.target.result; document.getElementById('imagePreview').innerHTML = `<div class="image-preview-item"><img src="${e.target.result}" alt="Preview"><span class="remove-image" onclick="window.remImage()">✕</span></div>`; Utils.showNotification(`Image ready (${Utils.formatSize(appState.selectedImageBase64.length)})`); };
-                r.readAsDataURL(f);
+            
+            handleImage(file) {
+                if (!file.type.match('image.*')) return Utils.showNotification('Please select an image', 'error');
+                if (file.size > CONFIG.maxImageSize) return Utils.showNotification(`Image too large! Max ${Utils.formatSize(CONFIG.maxImageSize)}`, 'error');
+                
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.src = e.target.result;
+                    img.onload = () => {
+                        // ضغط الصورة تلقائياً
+                        const canvas = document.createElement('canvas');
+                        const maxWidth = 800;
+                        const maxHeight = 1000;
+                        let width = img.width;
+                        let height = img.height;
+                        
+                        if (width > maxWidth) { height = (maxWidth / width) * height; width = maxWidth; }
+                        if (height > maxHeight) { width = (maxHeight / height) * width; height = maxHeight; }
+                        
+                        canvas.width = width;
+                        canvas.height = height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, width, height);
+                        
+                        appState.selectedImageBase64 = canvas.toDataURL('image/jpeg', 0.7);
+                        
+                        document.getElementById('imagePreview').innerHTML = `
+                            <div class="image-preview-item">
+                                <img src="${appState.selectedImageBase64}" alt="Preview">
+                                <span class="remove-image" onclick="window.remImage()">✕</span>
+                            </div>`;
+                        
+                        Utils.showNotification(`Image compressed to ${Utils.formatSize(appState.selectedImageBase64.length)}`);
+                    };
+                };
+                reader.readAsDataURL(file);
             }
+            
             remImage() { appState.selectedImageBase64 = null; document.getElementById('imagePreview').innerHTML = ''; document.getElementById('imageInput').value = ''; }
 
             setupPDF() {
@@ -477,7 +511,7 @@
             }
             handlePDF(f) {
                 if (f.type !== 'application/pdf') return Utils.showNotification('Please select a PDF','error');
-                if (f.size > CONFIG.maxPDFSize) return Utils.showNotification('PDF too large! Max 5MB','error');
+                if (f.size > CONFIG.maxPDFSize) return Utils.showNotification(`PDF too large! Max ${Utils.formatSize(CONFIG.maxPDFSize)}`,'error');
                 const r = new FileReader();
                 r.onload = e => { appState.selectedPDFBase64 = e.target.result; appState.selectedPDFName = f.name; document.getElementById('pdfPreview').innerHTML = `<div class="pdf-preview-item"><span class="pdf-icon">📄</span><span class="pdf-name">${Utils.escapeHTML(f.name)}</span><span style="font-size:10px;color:var(--text-secondary);">${Utils.formatSize(appState.selectedPDFBase64.length)}</span><span class="remove-image" onclick="window.remPDF()">✕</span></div>`; Utils.showNotification(`PDF ready (${Utils.formatSize(appState.selectedPDFBase64.length)})`); };
                 r.readAsDataURL(f);
@@ -489,7 +523,16 @@
                 if (!t || !a || !c) return Utils.showNotification('Fill required fields','error');
                 const btn = document.getElementById('submitBookBtn'); btn.disabled = true; btn.innerHTML = '⏳ Adding...';
                 try {
-                    await databaseService.addBook({ title: t, author: a, category: c, isbn: document.getElementById('bookISBN').value.trim(), caption: document.getElementById('bookCaption').value.trim(), imageUrl: appState.selectedImageBase64 || '', pdfUrl: appState.selectedPDFBase64 || '', pdfName: appState.selectedPDFName || '', avgRating: 0 });
+                    await databaseService.addBook({ 
+                        title: t, author: a, category: c, 
+                        isbn: document.getElementById('bookISBN').value.trim(), 
+                        bookLink: document.getElementById('bookLink').value.trim(), 
+                        caption: document.getElementById('bookCaption').value.trim(), 
+                        imageUrl: appState.selectedImageBase64 || '', 
+                        pdfUrl: appState.selectedPDFBase64 || '', 
+                        pdfName: appState.selectedPDFName || '', 
+                        avgRating: 0 
+                    });
                     Utils.showNotification('Book added! 🎉'); this.clearForm(); await this.updateStats();
                 } catch (e) { Utils.showNotification('Error: ' + e.message, 'error'); }
                 finally { btn.disabled = false; btn.innerHTML = '📚 Add Book to Library'; }
@@ -512,10 +555,20 @@
                 if (q) books = books.filter(b => (b.title||'').toLowerCase().includes(q) || (b.author||'').toLowerCase().includes(q) || (b.category||'').toLowerCase().includes(q) || (b.isbn||'').toLowerCase().includes(q));
                 const tbody = document.getElementById('booksTableBody');
                 document.getElementById('booksCount').textContent = books.length + ' books';
-                if (!books.length) { tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">📚</div><h3>${q?'No Results':'No Books'}</h3></div></td></tr>`; return; }
+                if (!books.length) { tbody.innerHTML = `<tr><td colspan="9"><div class="empty-state"><div class="empty-icon">📚</div><h3>${q?'No Results':'No Books'}</h3></div></td></tr>`; return; }
                 tbody.innerHTML = books.map(b => {
                     const r = (b.avgRating||0).toFixed(1), s = '★'.repeat(Math.round(b.avgRating||0))+'☆'.repeat(5-Math.round(b.avgRating||0));
-                    return `<tr><td>${b.imageUrl?`<img src="${b.imageUrl}" class="book-thumb" onerror="this.style.display='none';this.nextElementSibling.style.display='inline';"><span style="display:none;font-size:30px;">📖</span>`:'<span style="font-size:30px;">📖</span>'}</td><td><div class="book-title-cell" title="${Utils.escapeHTML(b.title)}">${Utils.escapeHTML(b.title)}</div></td><td>${Utils.escapeHTML(b.author)}</td><td><span class="badge badge-success">${Utils.escapeHTML(b.category)}</span></td><td><span class="rating-stars">${s}</span> ${r}</td><td>${b.isbn?`<code style="background:var(--input-bg);padding:4px 8px;border-radius:6px;font-size:12px;">${Utils.escapeHTML(b.isbn)}</code>`:'-'}</td><td>${b.pdfUrl?'<span class="badge badge-warning">📄 PDF</span>':'-'}</td><td><div class="actions-cell">${b.pdfUrl?`<a href="${b.pdfUrl}" target="_blank" class="btn btn-sm btn-warning">📄</a>`:''}<button class="btn btn-sm btn-danger" onclick="window.confirmDelete('${b.id}','${Utils.escapeHTML(b.title).replace(/'/g,"\\'")}')">🗑️</button></div></td></tr>`;
+                    return `<tr>
+                        <td>${b.imageUrl?`<img src="${b.imageUrl}" class="book-thumb" onerror="this.style.display='none';this.nextElementSibling.style.display='inline';"><span style="display:none;font-size:30px;">📖</span>`:'<span style="font-size:30px;">📖</span>'}</td>
+                        <td><div class="book-title-cell" title="${Utils.escapeHTML(b.title)}">${Utils.escapeHTML(b.title)}</div></td>
+                        <td>${Utils.escapeHTML(b.author)}</td>
+                        <td><span class="badge badge-success">${Utils.escapeHTML(b.category)}</span></td>
+                        <td><span class="rating-stars">${s}</span> ${r}</td>
+                        <td>${b.isbn?`<code style="background:var(--input-bg);padding:4px 8px;border-radius:6px;font-size:12px;">${Utils.escapeHTML(b.isbn)}</code>`:'-'}</td>
+                        <td>${b.bookLink?`<a href="${b.bookLink}" target="_blank" class="badge badge-info">🛒 Link</a>`:'-'}</td>
+                        <td>${b.pdfUrl?'<span class="badge badge-warning">📄 PDF</span>':'-'}</td>
+                        <td><div class="actions-cell">${b.pdfUrl?`<a href="${b.pdfUrl}" target="_blank" class="btn btn-sm btn-warning">📄</a>`:''}<button class="btn btn-sm btn-danger" onclick="window.confirmDelete('${b.id}','${Utils.escapeHTML(b.title).replace(/'/g,"\\'")}')">🗑️</button></div></td>
+                    </tr>`;
                 }).join('');
             }
 
@@ -550,7 +603,7 @@
         window.remImage = () => adminUI.remImage();
         window.remPDF = () => adminUI.remPDF();
         window.confirmDelete = (id, title) => adminUI.confirmDelete(id, title);
-        console.log('🚀 Admin Dashboard Ready - Base64 Storage Mode');
+        console.log('🚀 Admin Dashboard Ready - Base64 Storage with Auto-Compression');
     </script>
 </body>
 </html>
